@@ -1,24 +1,15 @@
 # VESC M365 Dash
-Allows you to connect your XIAOMI or NINEBOT display to VESC controller.
+Allows you to connect your NINEBOT G30 display to VESC controller.
 
 ## How
-Do you want to use your Xiaomi or NineBot BLE with a VESC controller? This is the right place for you! \
+Do you want to use your  NineBot BLE with a VESC controller? This is the right place for you! \
 Read one of the guides below to get started.
-
-- [DE Guide](/guide/DE.md)
-- [German Rollerplausch Guide](https://rollerplausch.com/threads/vesc-controller-einbau-1s-pro2-g30.6032/)
 
 ## Which version should I use?
 
 If you are running **VESC 6.02**, use these:
-- **M365**: https://github.com/m365fw/vesc_m365_dash/blob/main/m365_dash.lisp
-- **G30**: https://github.com/m365fw/vesc_m365_dash/blob/main/g30_dash.lisp
+- **G30**: https://github.com/Rebell81/vesc_g30_dash/blob/main/g30_dash.lisp
 - **How-To** Video: None (Use the more detailed guides linked above)
-
-when you are running **VESC 6.05 BETA**, use these:
-- **M365**: https://github.com/m365fw/vesc_m365_dash/blob/6_05_adc/m365_dash.lisp
-- **G30** https://github.com/m365fw/vesc_m365_dash/blob/6_05_adc/g30_dash.lisp
-- **How-To** Video: https://www.youtube.com/watch?v=kX8PsaxfoXQ
 
 ## How do I wire it?
 <span style="color:rgb(184, 49, 47);">Red </span>to 5V \
@@ -29,7 +20,24 @@ when you are running **VESC 6.05 BETA**, use these:
 
 ![image](guide/imgs/23999.png)
 
+Break lights
+<span style="color:rgb(184, 49, 47);">Red break light </span> to servo pin-ppm \
+<span style="color:rgb(209, 213, 216);">Black break light</span> to vesc servo GND \
+
+## difference with https://github.com/m365fw/vesc_m365_dash
+- [x] Add timeout shutdown for BLE after 5 mins
+- [x] Always show battery percentage on idle. Show speed only when you are running.
+- [x] Long beep after shutdown. Small beep when turn on.
+- [x] Stop lights for pin-ppm
+- [x] Secret mode - double beep. Default mode single beep
+- [x] You can change modes while running.
+- [x] Regenerative brake enables after 4km\h
+- [x] Disable option to shut down Ble while you are running
+- [x] Force front light disable after shutdown
+
 ## Implemented
+
+
 - [x] Add speed modes (double tap on button)
 - [x] Add secret speed mode (hold throttle and brake, double press)
 - [x] Add lock mode with beeping and braking (double press while braking)
@@ -49,30 +57,14 @@ Features to be added:
 
 ## Tested on
 ### BLEs
-- Clone M365 PRO Dashboard ([AliExpress](https://s.click.aliexpress.com/e/_9JHFDN))
-- Original DE-Edition PRO 2 Dashboard
+- Original G30 BLE Dashboard
 
 ### VESCs
-- Ubox (Best choice):
-    - Single Ubox 80v 100A Alu PCB ([Spintend](https://spintend.com/collections/diy-electric-skateboard-parts/products/single-ubox-aluminum-controller-80v-100a-based-on-vesc?ref=1zuna))
-- 75100 Box:
-    - Makerbase 75100 VESC ([AliExpress](https://s.click.aliexpress.com/e/_DmJxqxr) - 75€)
-    - Flipsky 75100 VESC ([Banggood](https://banggood.onelink.me/zMT7/zmenvmm2) - with Honey Add-On about 87€)
-
 - 75100 Alu PCB:
-    - Makerbase 75100 Alu PCB ([AliExpress](https://s.click.aliexpress.com/e/_DE9TKAl) - 95€)
     - Flipsky 75100 Alu PCB ([AliExpress](https://s.click.aliexpress.com/e/_DEXNhX3) - 151€)
 
-- 75200 Alu PCB (Top Performance):
-    - Makerbase 75200 Alu PCB ([AliExpress](https://s.click.aliexpress.com/e/_Dk3ucKd) - 143€)
-    - Flipsky 75200 Alu PCB ([AliExpress](https://s.click.aliexpress.com/e/_DkxlJbj) - 266€)
-
-- More recommended VESCs:
-    - MP2 300A 100V/150V VESC ([GitHub](https://github.com/badgineer/MP2-ESC) - DIY)
-    - and many more... use whatever you like.
-
 #### Requirements on VESC
-Requires 6.2 VESC firmware. \
+Requires 6.2 VESC firmware. 
 Can be found here: https://vesc-project.com/
 
 ## Worth to check out!
