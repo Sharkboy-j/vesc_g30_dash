@@ -1,3 +1,15 @@
+## Difference beetween https://github.com/m365fw/vesc_m365_dash
+
+- [x] Add timeout shutdown for BLE after 5 mins
+- [x] Always show battery percentage on idle. Show speed only when you are running.
+- [x] Long beep after shutdown. Small beep when turn on.
+- [x] Break lights from vesc servo pin-ppm
+- [x] Secret mode - double beep. Default mode single beep
+- [x] You can change modes while running.
+- [x] Regenerative brake enables after 4km\h
+- [x] Disable option to shut down Ble while you are running
+- [x] Force front light disable after shutdown
+
 # VESC M365 Dash
 Allows you to connect your NINEBOT G30 display to VESC controller.
 
@@ -24,18 +36,6 @@ If you are running **VESC 6.02**, use these:
 
 <span style="color:rgb(184, 49, 47);">Red </span> to servo pin-ppm \
 <span style="color:rgb(209, 213, 216);">Black </span> to vesc servo GND 
-
-## Difference beetween https://github.com/m365fw/vesc_m365_dash
-
-- [x] Add timeout shutdown for BLE after 5 mins
-- [x] Always show battery percentage on idle. Show speed only when you are running.
-- [x] Long beep after shutdown. Small beep when turn on.
-- [x] Stop lights for pin-ppm
-- [x] Secret mode - double beep. Default mode single beep
-- [x] You can change modes while running.
-- [x] Regenerative brake enables after 4km\h
-- [x] Disable option to shut down Ble while you are running
-- [x] Force front light disable after shutdown
 
 ## Implemented
 
