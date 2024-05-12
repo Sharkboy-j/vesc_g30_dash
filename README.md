@@ -20,11 +20,13 @@ If you are running **VESC 6.02**, use these:
 
 ![image](guide/imgs/23999.png)
 
-Break lights
-<span style="color:rgb(184, 49, 47);">Red break light </span> to servo pin-ppm \
-<span style="color:rgb(209, 213, 216);">Black break light</span> to vesc servo GND \
+## How do I wire break lights
 
-## difference with https://github.com/m365fw/vesc_m365_dash
+<span style="color:rgb(184, 49, 47);">Red </span> to servo pin-ppm \
+<span style="color:rgb(209, 213, 216);">Black </span> to vesc servo GND 
+
+## Difference beetween https://github.com/m365fw/vesc_m365_dash
+
 - [x] Add timeout shutdown for BLE after 5 mins
 - [x] Always show battery percentage on idle. Show speed only when you are running.
 - [x] Long beep after shutdown. Small beep when turn on.
