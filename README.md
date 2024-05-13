@@ -34,8 +34,8 @@ If you are running **VESC 6.02**, use these:
 
 ## How do I wire break lights
 
-<span style="color:rgb(184, 49, 47);">Red </span> to servo pin-ppm \
-<span style="color:rgb(209, 213, 216);">Black </span> to vesc servo GND 
+<span style="color:rgb(184, 49, 47);">Red </span> to swclk \
+<span style="color:rgb(209, 213, 216);">Black </span> to vesc GND 
 
 ## Implemented
 

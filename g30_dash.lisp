@@ -39,6 +39,9 @@
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
 (gpio-configure 'pin-ppm 'pin-mode-out)
+(gpio-configure 'pin-swdio 'pin-mode-out)
+(gpio-configure 'pin-swclk 'pin-mode-out)
+
 
 (define tx-frame (array-create 15))
 (bufset-u16 tx-frame 0 0x5AA5) ;Ninebot protocol
@@ -264,8 +267,9 @@
     (progn
         (setvar 'unlock 0) ; Disable unlock on turn off
         (apply-mode)
+        (gpio-write 'pin-swdio 0)
         (setvar 'back-enabled 0)
-        (gpio-write 'pin-ppm 0)
+        (gpio-write 'pin-swclk 0)
         (setvar 'off 1) ; turn off
         (setvar 'light 0) ; beep feedback
         (setvar 'beep-time 2)
@@ -278,9 +282,10 @@
     (progn
         (setvar 'last-action-time (systime))
         (setvar 'feedback 1) ; beep feedback
+        (gpio-write 'pin-swdio 1)
         (setvar 'off 0) ; turn on
         (setvar 'back-enabled 1)
-        (gpio-write 'pin-ppm 1)
+        (gpio-write 'pin-swclk 1)
         (setvar 'unlock 0) ; Disable unlock on turn off
         (apply-mode) ; Apply mode on start-up
         (stats-reset) ; reset stats when turning on
@@ -399,15 +404,15 @@
         (progn	
 		(if (> brake-in cal-brk-lo)
 			(progn
-				(gpio-write 'pin-ppm 1)
+				(gpio-write 'pin-swclk 1)
                              (sleep (/ 1.0 10))
-				(gpio-write 'pin-ppm 0)
+				(gpio-write 'pin-swclk 0)
 				(sleep (*(/ 1.0 10)0.25))
 			)
 		)
 				(if (<= brake-in cal-brk-lo)
 			(progn
-				(gpio-write 'pin-ppm 1)
+				(gpio-write 'pin-swclk 1)
 			)
 		)      
         )
