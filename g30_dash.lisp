@@ -9,38 +9,50 @@
 
 ;Calibrate brake min max
 (define cal-brk-lo 41.0)
-(define cal-brk-hi 155.0)
+(define cal-brk-hi 122.0)
 
 (define min-speed 1)
 
 ; Speed modes with MAX KM/H and MAX WATTS
 (define eco-speed (/ 25 3.6))
 (define eco-current 0.8)
-(define eco-watts 500)
+(define eco-watts 1200)
 (define drive-speed (/ 27 3.6))
-(define drive-current 0.9)
-(define drive-watts 700)
+(define drive-current 1)
+(define drive-watts 1500)
 (define sport-speed (/ 27 3.6))
 (define sport-current 1.0)
-(define sport-watts 1200)
+(define sport-watts 1500)
+(define motor-max 60)
+(define motor-abs 100)
+
 
 (define secret-enabled 1)
 (define secret-eco-speed (/ 27 3.6))
-(define secret-eco-current 0.8)
-(define secret-eco-watts 1200)
-(define secret-drive-speed (/ 40 3.6))
-(define secret-drive-current 0.9)
-(define secret-drive-watts 1500)
-(define secret-sport-speed (/ 1000 3.6)) ; 1000 km/h easy
-(define secret-sport-current 1.0)
-(define secret-sport-watts 2000)
+(define secret-eco-current 1)
+(define secret-eco-watts 1500)
 
-; **** Code section ****
+(define secret-drive-speed (/ 44 3.6))
+(define secret-drive-current 1)
+(define secret-drive-watts 1500)
+
+(define secret-sport-speed (/ 90 3.6))
+(define secret-sport-current 1.0)
+(define secret-sport-watts 2500)
+
+(define secret-motor-max 90)
+(define secret-motor-abs 140)
+
+;timeout
+(define ble-timeout (* 30 60))
+(define last-action-time (systime))
+(define secs-left 0)
+
+
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
-(gpio-configure 'pin-ppm 'pin-mode-out)
-(gpio-configure 'pin-swdio 'pin-mode-out)
-(gpio-configure 'pin-swclk 'pin-mode-out)
+(gpio-configure 'pin-swdio 'pin-mode-out); deck_light
+(gpio-configure 'pin-swclk 'pin-mode-out); break_light
 
 
 (define tx-frame (array-create 15))
@@ -51,10 +63,8 @@
 
 (define uart-buf (array-create type-byte 64))
 (define current-speed 0)
-(define throttle-in 0)
-(define throttle 0)
-(define brake-in 0)
-(define brake 0)
+
+
 (define buttonold 0)
 (define light 0)
 (define c-out 0)
@@ -77,18 +87,24 @@
 (define feedback 0)
 (define beep-time 1)
 
-;timeout
-(define ble-timeout (* 5 60))
-(define last-action-time (systime))
-(define secs-left 0)
+; cruise
+(define throttle-in 0)
+(define throttle 0)
+(define brake-in 0)
+(define brake 0)
+(define last-throttle-time (systime))
+(define last-throttle-pos 0)
 
 (defun adc-input(buffer) ; Frame 0x65
     (progn
         (setvar 'current-speed (* (get-speed) 3.6))
         
+        
+        
         ; Throttle
         (setvar 'throttle-in (bufget-u8 uart-buf 5))
         (setvar 'throttle (/(- throttle-in cal-thr-lo) cal-thr-hi))
+        
         
         (if (< throttle deadzone)
             (setvar 'throttle 0)
@@ -96,6 +112,7 @@
         (if (> throttle 1)
             (setvar 'throttle 1)
         )
+   
         
         
         ; Brake
@@ -105,7 +122,7 @@
         (if(< brake deadzone)
             (setvar 'brake 0)
         )
-        (if (< current-speed 4) ;brk-minspeed=4
+        (if (< current-speed 1) ;brk-minspeed=4
             (setvar 'brake 0)
         )
         (if (> brake 1)
@@ -234,13 +251,13 @@
                     (if (and (> len 0) (< len 60)) ; max 64 bytes
                         (progn
                             (uart-read-bytes uart-buf (+ len 6) 0) ;read remaining 6 bytes + payload, overwrite buffer
-							(setvar 'bCmd (bufget-u8 uart-buf 2)) ;save bCmd
-							(setvar 'wChecksumLE (bufget-u16 uart-buf (+ len 4)))
-							(looprange i 0 (+ len 4) ;prepare checksum, add values of bSrcAddr bDstAddr bCmd bArg bPayload to len
-								(setvar 'crc (+ crc (bufget-u8 uart-buf i))))
-								;little-endian is broken, do 0xFFFF xor (16-bit sum of bytes <len bSrcAddr bDstAddr bCmd bArg bPayload[]>)
-							(setvar 'wChecksumLECalculated (bitwise-and (+ (shr (bitwise-xor crc 0xFFFF) 8) (shl (bitwise-xor crc 0xFFFF) 8)) 65535))
-							(if (= wChecksumLE wChecksumLECalculated);If the calculated checksum matches with sent checksum, forward comman
+                            (setvar 'bCmd (bufget-u8 uart-buf 2)) ;save bCmd
+                            (setvar 'wChecksumLE (bufget-u16 uart-buf (+ len 4)))
+                            (looprange i 0 (+ len 4) ;prepare checksum, add values of bSrcAddr bDstAddr bCmd bArg bPayload to len
+                            (setvar 'crc (+ crc (bufget-u8 uart-buf i))))
+                            ;little-endian is broken, do 0xFFFF xor (16-bit sum of bytes <len bSrcAddr bDstAddr bCmd bArg bPayload[]>)
+                            (setvar 'wChecksumLECalculated (bitwise-and (+ (shr (bitwise-xor crc 0xFFFF) 8) (shl (bitwise-xor crc 0xFFFF) 8)) 65535))
+                            (if (= wChecksumLE wChecksumLECalculated);If the calculated checksum matches with sent checksum, forward comman
                                 (handle-frame bCmd)
                             )
                         )
@@ -256,6 +273,7 @@
         (if(= code 0x65)
             (adc-input uart-buf)
         )
+
 
         (if(= code 0x64)
             (update-dash uart-buf)
@@ -288,7 +306,7 @@
         (gpio-write 'pin-swclk 1)
         (setvar 'unlock 0) ; Disable unlock on turn off
         (apply-mode) ; Apply mode on start-up
-        (stats-reset) ; reset stats when turning on
+        ;(stats-reset) ; reset stats when turning on
     )
 )
 
@@ -361,40 +379,54 @@
 )
 
 ; Speed mode implementation
-
+; mode field (1=drive, 2=eco, 4=sport, 8=charge, 16=off, 32=lock)
 (defun apply-mode()
+
     (if (= unlock 0)
         (if (= speedmode 1)
-            (configure-speed drive-speed drive-watts drive-current)
+            (configure-speed drive-speed drive-watts drive-current motor-max motor-abs)
             (if (= speedmode 2)
-                (configure-speed eco-speed eco-watts eco-current)
+                (configure-speed eco-speed eco-watts eco-current motor-max motor-abs)
                 (if (= speedmode 4)
-                    (configure-speed sport-speed sport-watts sport-current)
+                    (configure-speed sport-speed sport-watts sport-current motor-max motor-abs)
                 )
             )
         )
         (if (= speedmode 1)
-            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current)
+            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current motor-max motor-abs)
             (if (= speedmode 2)
-                (configure-speed secret-eco-speed secret-eco-watts secret-eco-current)
+                (configure-speed secret-eco-speed secret-eco-watts secret-eco-current motor-max motor-abs)
                 (if (= speedmode 4)
-                    (configure-speed secret-sport-speed secret-sport-watts secret-sport-current)
+                    (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-motor-max secret-motor-abs)
                 )
             )
         )
     )
 )
 
-(defun configure-speed(speed watts current)
+(defun configure-speed(speed watts current motor-max motor-abs)
     (progn
+        (if (!= feedback 2)
+            (setvar 'feedback 1)
+        )
+        (print "1")
+        ;l-in-current-max - battery current max
+        
         (conf-set 'max-speed speed)
         (conf-set 'l-watt-max watts)
         (conf-set 'l-current-max-scale current)
+        (conf-set 'l-current-max motor-max) ; motor current max
+        (conf-set 'l-abs-current-max motor-abs) ; motor abs max
+        
+        (print (conf-get 'l-current-max))
+        (print (conf-get 'l-abs-current-max))
     )
 )
 
 ; Apply mode on start-up
 (apply-mode)
+(gpio-write 'pin-swdio 1)
+
 
 ; Spawn UART reading frames thread
 (spawn 150 read-frames) 
@@ -402,19 +434,19 @@
 (defun ppm-sig()
     (if(= back-enabled 1)
         (progn	
-		(if (> brake-in cal-brk-lo)
-			(progn
-				(gpio-write 'pin-swclk 1)
-                             (sleep (/ 1.0 10))
-				(gpio-write 'pin-swclk 0)
-				(sleep (*(/ 1.0 10)0.25))
-			)
-		)
-				(if (<= brake-in cal-brk-lo)
-			(progn
-				(gpio-write 'pin-swclk 1)
-			)
-		)      
+            (if (> brake 0)
+                (progn
+                    (gpio-write 'pin-swclk 1)
+                    (sleep (/ 1.0 10))
+                    (gpio-write 'pin-swclk 0)
+                    (sleep (*(/ 1.0 10)0.25))
+                )
+            )
+            (if (<= brake 0)
+                (progn
+                    (gpio-write 'pin-swclk 1)
+                )
+            )      
         )
     )
 )
@@ -429,7 +461,6 @@
     )    
 )
 
-
 (loopwhile t
     (progn
         (if (> buttonold (gpio-read 'pin-rx))
@@ -437,9 +468,9 @@
                 (setvar 'presses (+ presses 1))
                 (setvar 'presstime (systime))
             )
-            (if (> (- (systime) presstime) 2500) ; after 2500 ms
+            (if (> (- (systime) presstime) 4500) ; after 2500 ms
                 (if (= (gpio-read 'pin-rx) 0) ; check button is still pressed
-                    (if (> (- (systime) presstime) 6000) ; long press after 6000 ms
+                    (if (> (- (systime) presstime) 8000) ; long press after 8000 ms
                         (progn
                             (if (<= (get-speed) (/ 0.1 3.6)) ;button-safety-speed
                                 (handle-holding-button)

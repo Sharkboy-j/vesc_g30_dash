@@ -1,12 +1,12 @@
 ## Difference beetween https://github.com/m365fw/vesc_m365_dash
 
-- [x] Add timeout shutdown for BLE after 5 mins
+- [x] Add timeout shutdown for BLE after 30 mins
 - [x] Always show battery percentage on idle. Show speed only when you are running.
 - [x] Long beep after shutdown. Small beep when turn on.
-- [x] Break lights from vesc servo pin-ppm
+- [x] Break lights flashing from vesc. Should be connected to servo 'pin-swclk"
 - [x] Secret mode - double beep. Default mode single beep
-- [x] You can change modes while running.
-- [x] Regenerative brake enables after 4km\h
+- [x] You can change gears (speed mode) while running.
+- [x] Regenerative brake enables after 1 km\h
 - [x] Disable option to shut down Ble while you are running
 - [x] Force front light disable after shutdown
 
