@@ -12,7 +12,6 @@
 (define cal-brk-hi 122.0)
 
 (define min-speed 1)
-(define cruise-after-sec 8)
 
 ; Speed modes with MAX KM/H and MAX WATTS
 (define eco-speed (/ 25 3.6))
@@ -86,19 +85,58 @@
 (define feedback 0)
 (define beep-time 1)
 
-(define current-speed 0)
-(define brake-in 0)
-(define brake 0)
-(define throttle-in 0)
-(define throttle 0)
-
 ; cruise
 (define last-throttle-updated-at-time (systime))
 (define last-throttle-pos 0)
 (define last-cruise-pos 0)
 (define last-throttle-dead-min 0)
 (define last-throttle-dead-max 0)
+(define cruise-after-sec 5)
 (define cruise-enabled 0)
+
+
+
+(define current-speed 0)
+(define throttle-in 0)
+(define throttle 0)
+(define brake-in 0)
+(define brake 0)
+
+(define boot-time (systime))
+
+(defun printf(msg)
+    (progn
+        (def res (secs-since boot-time))
+        (print (str-merge (str-from-n res "%.2fs") ": " msg))
+    )
+)
+
+(defun beep(time count)
+    (progn
+        (printf (str-merge "beep time(" (str-from-n time) ") count(" (str-from-n count) ")"))
+        (setvar 'beep-time time)
+        (setvar 'feedback count)  
+    )
+)
+
+(defun disable-cruise(handler)
+    (if (= cruise-enabled 1)
+        (progn
+            (printf (str-merge "DISABLE cruise by " handler))
+            (setvar 'cruise-enabled 0)
+        )
+    )
+)
+
+(defun enable-cruise()
+    (progn
+        (printf "enable cruise")
+        (beep 2 2)
+        (setvar 'last-throttle-pos (bufget-u8 uart-buf 5))
+        (setvar 'last-cruise-pos (bufget-u8 uart-buf 5))
+        (setvar 'cruise-enabled 1)
+    )
+)
 
 
 (defun adc-input(buffer) ; Frame 0x65
@@ -124,20 +162,14 @@
         
         (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
             (if (!= cruise-enabled 1)
-                (progn
-                    (setvar 'beep-time 2)
-                    (setvar 'feedback 2) ; beep feedback
-                    (setvar 'last-throttle-pos (bufget-u8 uart-buf 5))
-                    (setvar 'last-cruise-pos (bufget-u8 uart-buf 5))
-                    (setvar 'cruise-enabled 1)
-                )
+                (enable-cruise)
             )
         )
         
         (if (= cruise-enabled 1)
             (if (= last-throttle-pos 40)
                 (if (> (bufget-u8 uart-buf 5) 40)
-                    (setvar 'cruise-enabled 0)
+                    (disable-cruise "throttle push")
                 )
             )   
         )
@@ -165,15 +197,15 @@
         (if(< brake deadzone)
             (setvar 'brake 0)
         )
-        (if (< current-speed 1) ;brk-minspeed=4
+        (if (<= current-speed 0) ;brk-minspeed=4
             (setvar 'brake 0)
         )
         (if (> brake 1)
             (setvar 'brake 1)
         )
         
-        (if (> brake 0)
-            (setvar 'cruise-enabled 0)    
+        (if (>= brake-in cal-brk-lo)
+            (disable-cruise "brake push")
         )
         
         ; time-out
@@ -203,11 +235,11 @@
         ; make
         (if (= (+ off lock) 0)
             (progn ; Driving mode
-                ;(if (>= current-speed min-speed)
-                ;    (set-current-rel throttle)
-                ;    (set-current-rel 0)
-                ;)
-                (set-current-rel throttle)
+                (if (<= brake-in cal-brk-lo)
+                    (set-current-rel throttle)
+                    (set-current-rel 0)
+                )
+                ;(set-current-rel throttle)
                 (if (not (= brake 0))
                     (set-brake-rel brake)
                 )
@@ -260,7 +292,7 @@
                 (progn
                     (bufset-u8 tx-frame 10 beep-time)
                     (setvar 'feedback (- feedback 1))
-                    (setvar 'beep-time 1)
+                    ;(setvar 'beep-time 1)
                 )
                 (bufset-u8 tx-frame 10 0)
             )
@@ -330,30 +362,31 @@
 
 (defun shut-down-ble()
     (progn
+        (disable-cruise "ble shut down")
         (setvar 'unlock 0) ; Disable unlock on turn off
         (apply-mode)
         (gpio-write 'pin-swdio 0)
         (setvar 'back-enabled 0)
         (gpio-write 'pin-swclk 0)
         (setvar 'off 1) ; turn off
-        (setvar 'light 0) ; beep feedback
-        (setvar 'beep-time 2)
-        (setvar 'feedback 1) ; beep feedback
+        (setvar 'light 0)
+        (beep 2 1)
         (setvar 'secs-left 0)
+        (conf-store)
     )
 )
 
 (defun turn-on-ble()
     (progn
+        (disable-cruise "ble turn on")
         (setvar 'last-action-time (systime))
-        (setvar 'feedback 1) ; beep feedback
+        (beep 1 1)
         (gpio-write 'pin-swdio 1)
         (setvar 'off 0) ; turn on
         (setvar 'back-enabled 1)
         (gpio-write 'pin-swclk 1)
         (setvar 'unlock 0) ; Disable unlock on turn off
         (apply-mode) ; Apply mode on start-up
-        ;(stats-reset) ; reset stats when turning on
     )
 )
 
@@ -370,22 +403,15 @@
                         (progn
                              (setvar 'unlock (bitwise-xor unlock 1))
                              (if (= unlock 0)
-                                (progn
-                                    (setvar 'beep-time 2)
-                                    (setvar 'feedback 1) ; beep long
-                                )
-                                (progn
-                                    (setvar 'beep-time 1)
-                                    (setvar 'feedback 2) ; beep 2x
-                                )
+                                (beep 2 1)
+                                (beep 1 2)
                              )
                              
                             (apply-mode)
                         )
                         (progn
                             (setvar 'lock (bitwise-xor lock 1)) ; lock on or off
-                            (setvar 'beep-time 1)
-                            (setvar 'feedback 1) ; beep 2x
+                            (beep 1 1)
                         )
                     )
                     (progn
@@ -454,9 +480,8 @@
 (defun configure-speed(speed watts current motor-max motor-abs)
     (progn
         (if (!= feedback 2)
-            (setvar 'feedback 1)
+             (beep 1 1)
         )
-        (print "1")
         ;l-in-current-max - battery current max
         
         (conf-set 'max-speed speed)
@@ -465,8 +490,10 @@
         (conf-set 'l-current-max motor-max) ; motor current max
         (conf-set 'l-abs-current-max motor-abs) ; motor abs max
         
-        (print (conf-get 'l-current-max))
-        (print (conf-get 'l-abs-current-max))
+        (printf (str-merge "configure-speed=> motorMax:" (str-from-n (conf-get 'l-current-max)) " motorAbs:" (str-from-n (conf-get 'l-abs-current-max))   ))
+        
+        ;(print (conf-get 'l-current-max))
+        ;(print (conf-get 'l-abs-current-max))
     )
 )
 
