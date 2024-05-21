@@ -12,6 +12,7 @@
 (define cal-brk-hi 122.0)
 
 (define min-speed 1)
+(define cruise-after-sec 8)
 
 ; Speed modes with MAX KM/H and MAX WATTS
 (define eco-speed (/ 25 3.6))
@@ -62,8 +63,6 @@
 (bufset-u16 tx-frame 5 0x6400) ; Packet is from ESC to BLE
 
 (define uart-buf (array-create type-byte 64))
-(define current-speed 0)
-
 
 (define buttonold 0)
 (define light 0)
@@ -87,34 +86,78 @@
 (define feedback 0)
 (define beep-time 1)
 
-; cruise
-(define throttle-in 0)
-(define throttle 0)
+(define current-speed 0)
 (define brake-in 0)
 (define brake 0)
-(define last-throttle-time (systime))
+(define throttle-in 0)
+(define throttle 0)
+
+; cruise
+(define last-throttle-updated-at-time (systime))
 (define last-throttle-pos 0)
+(define last-cruise-pos 0)
+(define last-throttle-dead-min 0)
+(define last-throttle-dead-max 0)
+(define cruise-enabled 0)
+
 
 (defun adc-input(buffer) ; Frame 0x65
     (progn
         (setvar 'current-speed (* (get-speed) 3.6))
         
+        (setvar 'last-throttle-dead-min (- throttle-in 3))
+        (setvar 'last-throttle-dead-max (+ throttle-in 3))
         
+        (if (<= (bufget-u8 uart-buf 5) 40)
+            (setvar 'last-throttle-updated-at-time (systime))
+        )
         
+        (if (> (bufget-u8 uart-buf 5) last-throttle-dead-max)
+             (setvar 'last-throttle-updated-at-time (systime))
+        )
+        
+        (if (= cruise-enabled 1)
+          (if (!= last-throttle-pos 40)
+             (setvar 'last-throttle-pos (bufget-u8 uart-buf 5))
+          )
+        )
+        
+        (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
+            (if (!= cruise-enabled 1)
+                (progn
+                    (setvar 'beep-time 2)
+                    (setvar 'feedback 2) ; beep feedback
+                    (setvar 'last-throttle-pos (bufget-u8 uart-buf 5))
+                    (setvar 'last-cruise-pos (bufget-u8 uart-buf 5))
+                    (setvar 'cruise-enabled 1)
+                )
+            )
+        )
+        
+        (if (= cruise-enabled 1)
+            (if (= last-throttle-pos 40)
+                (if (> (bufget-u8 uart-buf 5) 40)
+                    (setvar 'cruise-enabled 0)
+                )
+            )   
+        )
+       
         ; Throttle
-        (setvar 'throttle-in (bufget-u8 uart-buf 5))
-        (setvar 'throttle (/(- throttle-in cal-thr-lo) cal-thr-hi))
-        
+        (if (= cruise-enabled 0)
+            (setvar 'throttle-in (bufget-u8 uart-buf 5))
+        )
+        (if (= cruise-enabled 0)
+            (setvar 'throttle (/(- throttle-in cal-thr-lo) cal-thr-hi))
+        )
         
         (if (< throttle deadzone)
             (setvar 'throttle 0)
         )
+            
         (if (> throttle 1)
             (setvar 'throttle 1)
         )
-   
-        
-        
+      
         ; Brake
         (setvar 'brake-in (bufget-u8 uart-buf 6))
         (setvar 'brake (/(- brake-in cal-brk-lo) cal-brk-hi))
@@ -129,6 +172,9 @@
             (setvar 'brake 1)
         )
         
+        (if (> brake 0)
+            (setvar 'cruise-enabled 0)    
+        )
         
         ; time-out
         (if (= off 0)
@@ -157,10 +203,11 @@
         ; make
         (if (= (+ off lock) 0)
             (progn ; Driving mode
-                (if (> current-speed min-speed)
-                    (set-current-rel throttle)
-                    (set-current-rel 0)
-                )
+                ;(if (>= current-speed min-speed)
+                ;    (set-current-rel throttle)
+                ;    (set-current-rel 0)
+                ;)
+                (set-current-rel throttle)
                 (if (not (= brake 0))
                     (set-brake-rel brake)
                 )
@@ -268,12 +315,12 @@
     )
 )
 
+
 (defun handle-frame(code)
     (progn
         (if(= code 0x65)
             (adc-input uart-buf)
         )
-
 
         (if(= code 0x64)
             (update-dash uart-buf)
