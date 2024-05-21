@@ -1,6 +1,6 @@
 ## Difference beetween https://github.com/m365fw/vesc_m365_dash
 
-- [x] Cruise control after 8 sec (disable after pressing brake or throttle)
+- [x] Cruise control after 5 sec (disable after pressing brake or throttle)
 - [x] 0km/h start speed !!!!BE CAREFULL!!!!
 - [x] Add timeout shutdown for BLE after 30 mins
 - [x] Always show battery percentage on idle. Show speed only when you are running.

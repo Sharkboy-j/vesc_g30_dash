@@ -92,6 +92,7 @@
 (define last-throttle-dead-min 0)
 (define last-throttle-dead-max 0)
 (define cruise-after-sec 5)
+(define cruise-dead-zone 5)
 (define cruise-enabled 0)
 
 
@@ -143,8 +144,8 @@
     (progn
         (setvar 'current-speed (* (get-speed) 3.6))
         
-        (setvar 'last-throttle-dead-min (- throttle-in 3))
-        (setvar 'last-throttle-dead-max (+ throttle-in 3))
+        (setvar 'last-throttle-dead-min (- throttle-in cruise-dead-zone))
+        (setvar 'last-throttle-dead-max (+ throttle-in cruise-dead-zone))
         
         (if (<= (bufget-u8 uart-buf 5) 40)
             (setvar 'last-throttle-updated-at-time (systime))
