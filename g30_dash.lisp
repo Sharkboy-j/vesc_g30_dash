@@ -198,7 +198,7 @@
         (if(< brake deadzone)
             (setvar 'brake 0)
         )
-        (if (<= current-speed 0) ;brk-minspeed=4
+        (if (<= current-speed 1) ;brk-minspeed=4
             (setvar 'brake 0)
         )
         (if (> brake 1)
