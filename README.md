@@ -25,6 +25,10 @@ If you are running **VESC 6.02**, use these:
 - **G30**: https://github.com/Rebell81/vesc_g30_dash/blob/main/g30_dash.lisp
 - **How-To** Video: None (Use the more detailed guides linked above)
 
+If you are running **VESC 6.05**, use these:
+- **G30**: https://github.com/Rebell81/vesc_g30_dash/blob/main/g30_dash_ADC_6.05v.lisp
+- **How-To** [Video:](https://www.youtube.com/watch?v=kX8PsaxfoXQ)
+
 ## How do I wire it?
 <span style="color:rgb(184, 49, 47);">Red </span>to 5V \
 <span style="color:rgb(209, 213, 216);">Black </span>to GND \
@@ -68,7 +72,7 @@ Features to be added:
     - Flipsky 75100 Alu PCB ([AliExpress](https://s.click.aliexpress.com/e/_DEXNhX3) - 151€)
 
 #### Requirements on VESC
-Requires 6.2 VESC firmware. 
+Requires 6.2\6.5 VESC firmware. 
 Can be found here: https://vesc-project.com/
 
 ## Worth to check out!
