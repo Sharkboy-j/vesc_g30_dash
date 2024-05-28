@@ -25,40 +25,40 @@
 (def eco-fw 0)
 (def drive-fw 0)
 (def sport-fw 0)
-(define eco-speed (/ 25 3.6))
+(define eco-speed (/ 15 3.6))
 (define eco-current 0.8)
-(define eco-watts 1200)
-(define drive-speed (/ 27 3.6))
+(define eco-watts 1500)
+(define drive-speed (/ 25 3.6))
 (define drive-current 1)
-(define drive-watts 1500)
-(define sport-speed (/ 27 3.6))
+(define drive-watts 2000)
+(define sport-speed (/ 28 3.6))
 (define sport-current 1.0)
-(define sport-watts 1500)
+(define sport-watts 2500)
 
-(define def-motor-max 60)
-(define def-motor-abs 100)
+(define def-motor-max 90)
+(define def-motor-abs 140)
 
 ; Secret speed modes. To enable, press the button 2 times while holding break and throttle at the same time.
 (def secret-enabled 1)
 (def secret-eco-fw 0)
 (def secret-drive-fw 0)
-(def secret-sport-fw 10)
+(def secret-sport-fw 15)
 
 (define secret-enabled 1)
-(define secret-eco-speed (/ 27 3.6))
+(define secret-eco-speed (/ 40 3.6))
 (define secret-eco-current 1)
 (define secret-eco-watts 1500)
 
-(define secret-drive-speed (/ 45 3.6))
+(define secret-drive-speed (/ 99 3.6))
 (define secret-drive-current 1)
-(define secret-drive-watts 1500)
+(define secret-drive-watts 2000)
 
-(define secret-sport-speed (/ 90 3.6))
+(define secret-sport-speed (/ 99 3.6))
 (define secret-sport-current 1.0)
-(define secret-sport-watts 2500)
+(define secret-sport-watts 3000)
 
-(define secret-motor-max 90)
-(define secret-motor-abs 140)
+(define secret-motor-max 110)
+(define secret-motor-abs 170)
 
 ;backlights
 (define back-enabled 1)
@@ -137,12 +137,12 @@
                 )
                 (if (< brake min-brake-val)
                     {
-                    (gpio-write 'pin-swclk 1)
+                        (gpio-write 'pin-swclk 1)
                     }
                 )
             }
         )
-        
+
         (sleep 0.05)
 })
 
@@ -150,7 +150,7 @@
     {
         ;(printf (str-merge "beep time(" (str-from-n time) ") count(" (str-from-n count) ")"))
         (set 'beep-time time)
-        (set 'feedback count)  
+        (set 'feedback count)
     }
 )
 
@@ -165,7 +165,7 @@
 )
 
 (defun enable-cruise(thr)
-    {        
+    {
         (printf "enable cruise")
         (setvar 'cruise-enabled 1)
         (app-adc-override 3 thr)
@@ -177,35 +177,35 @@
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
-    
+
         (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
         (set 'thr (/(bufget-u8 uart-buf 5) 77.2)) ; 255/3.3 = 77.2
-        
+
         (if (>= brake min-brake-val)
             (disable-cruise "brake")
         )
-        
+
         (if (<= thr min-thr-val)
             (setvar 'last-throttle-updated-at-time (systime))
         )
-        
+
         (if (>= thr last-throttle-dead-max)
             (setvar 'last-throttle-updated-at-time (systime))
         )
-        
+
         (if (<= thr last-throttle-dead-min)
             (setvar 'last-throttle-updated-at-time (systime))
         )
-        
+
         (if (= cruise-enabled 1)
             (if (< last-throttle-dead-min min-thr-val)
                 (if (> thr min-thr-val)
                     (disable-cruise "throttle push")
-                )   
-            )   
+                )
+            )
         )
-        
-        
+
+
         (let ((current-speed (* (get-speed) 3.6)))
             {
                 (if (< thr 0)
@@ -216,13 +216,13 @@
                     (setf brake 0))
                 (if (> brake 3.3)
                     (setf brake 3.3))
-                
+
                 ; Pass through throttle and brake to VESC
                 (app-adc-override 0 thr)
                 (app-adc-override 1 brake)
             }
         )
-        
+
          (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
             (if (!= cruise-enabled 1)
                 (enable-cruise thr)
@@ -244,13 +244,13 @@
                     ;    (canset-current i 0)
                     ;)
                 }
-                
+
             )
             (if (app-is-output-disabled) ; Enable output when scooter is turned on
                 (app-disable-output 0)
             )
         )
-        
+
         (if (= lock 1)
             {
                 (set-current-rel 0) ; No current input when locked
@@ -276,10 +276,10 @@
                 (if (or (> (get-temp-fet) hi-temp-fet) (> (get-temp-mot) hi-temp-motor)) ; temp icon will show up above 60 degree
                     (bufset-u8 tx-frame 7 (+ 128 speedmode))
                     (bufset-u8 tx-frame 7 speedmode)
-                )            
+                )
             )
         )
-                
+
         ; batt field
         (bufset-u8 tx-frame 8 battery)
 
@@ -288,7 +288,7 @@
             (bufset-u8 tx-frame 9 light)
             (bufset-u8 tx-frame 9 0)
         )
-                
+
         ; beep field
         (if (= lock 1)
             (if (> current-speed min-speed)
@@ -308,7 +308,7 @@
             (bufset-u8 tx-frame 11 current-speed)
             (bufset-u8 tx-frame 11 battery)
         )
-                
+
         ; error field
         (bufset-u8 tx-frame 12 (get-fault))
 
@@ -340,8 +340,8 @@
 
                             (let ((code (bufget-u8 uart-buf 2)) (checksum (bufget-u16 uart-buf (+ len 4))))
                                 {
-                                    (looprange i 0 (+ len 4) (set 'crc (+ crc (bufget-u8 uart-buf i))))    
-                                
+                                    (looprange i 0 (+ len 4) (set 'crc (+ crc (bufget-u8 uart-buf i))))
+
                                     (if (= checksum (bitwise-and (+ (shr (bitwise-xor crc 0xFFFF) 8) (shl (bitwise-xor crc 0xFFFF) 8)) 65535)) ;If the calculated checksum matches with sent checksum, forward comman
                                         (handle-frame code)
                                     )
@@ -360,7 +360,7 @@
         (if (and (= code 0x65) (= software-adc 1))
             (adc-input uart-buf)
         )
-        
+
         (if(= code 0x64)
             (update-dash uart-buf)
         )
@@ -384,10 +384,12 @@
 (defun handle-button()
     (if (= presses 1) ; single press
         (if (= off 1) ; is it off? turn on scooter again
-            (turn-on-ble)   
+            (turn-on-ble)
             {
                 (if (<= (get-speed) button-safety-speed)
-                    (set 'light (bitwise-xor light 1)) ; toggle light
+                    (if (<= brake 0.52)
+                        (set 'light (bitwise-xor light 1)) ; toggle light
+                    )
                 )
             }
         )
@@ -401,7 +403,7 @@
                                 (beep 2 1)
                                 (beep 1 2)
                              )
-                             
+
                             (apply-mode)
                         }
                         {
@@ -439,8 +441,8 @@
         (set 'light 0) ; disable front light
         (beep 2 1)
         (set 'off 1) ; turn off
-        
-        
+
+
         ;(setvar 'secs-left 0)
         ;(conf-store)
     }
@@ -493,12 +495,12 @@
         (set-param 'l-current-max-scale current)
         (set-param 'l-current-max motor-max) ; motor current max
         (set-param 'l-abs-current-max motor-abs) ; motor abs max
-        
+        (set-param 'foc-fw-current-max fw)
+
         (printf (str-merge "configure-speed=> motorMax:" (str-from-n (conf-get 'l-current-max)) " motorAbs:" (str-from-n (conf-get 'l-abs-current-max))
         " fw:" (str-from-n (conf-get 'foc-fw-current-max))
         ))
 
-        (set-param 'foc-fw-current-max fw)
         (if (!= beep-time 2)
              (beep 1 1)
         )
@@ -545,7 +547,7 @@
                 (if (not (= button buttonconfirm))
                     (set 'button 0)
                 )
-                
+
                 (if (> buttonold button)
                     {
                         (set 'presses (+ presses 1))
@@ -553,7 +555,7 @@
                     }
                     (button-apply button)
                 )
-                
+
                 (set 'buttonold button)
                 (handle-features)
             }
