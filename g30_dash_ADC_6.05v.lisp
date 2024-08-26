@@ -184,21 +184,9 @@
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
-        (var testThr (/(bufget-u8 uart-buf 5) 77.2))
-
+        (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
         (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-        (if (> testThr min-thr-val)
-            (if (< brake min-brake-val)
-                {
-                    (set 'thr testThr) ; 255/3.3 = 77.2
-                }
-            )
-        )
-        (if (< testThr min-thr-val)
-             (if (> brake min-brake-val)
-                (set 'thr 0)
-             )
-        )
+       
 
         (if (>= brake min-brake-val)
             (disable-cruise "brake")

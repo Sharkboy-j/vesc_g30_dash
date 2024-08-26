@@ -1,6 +1,7 @@
 ## Difference beetween https://github.com/m365fw/vesc_m365_dash
 
-- [x] Cruise control after 5 sec (disable after pressing brake or throttle)
+![image](guide/imgs/cruise.png)
+- [x] Cruise control after 5 sec (disable after pressing brake or throttle) (box should be enabled in App Settings -> ADC -> General -> Button Inputs Enable Cruise Control)
 - [x] 0km/h start speed !!!!BE CAREFULL!!!!
 - [x] Add timeout shutdown for BLE after 30 mins
 - [x] Always show battery percentage on idle. Show speed only when you are running.
@@ -9,8 +10,8 @@
 - [x] Secret mode - double beep. Default mode single beep
 - [x] You can change gears (speed mode) while running.
 - [x] Regenerative brake enables after 1 km\h
-- [x] Disable option to shut down Ble while you are running
-- [x] Force front light disable after shutdown
+- [x] Disable option to shut down BLE while you are running
+- [x] Force front light disabling after shutdown
 
 # VESC M365 Dash
 Allows you to connect your NINEBOT G30 display to VESC controller.
