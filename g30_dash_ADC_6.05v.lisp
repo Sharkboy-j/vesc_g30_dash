@@ -98,9 +98,6 @@
 (def presses 0)
 (def off 0)
 
-(def thr 0)
-(def brake 0)
-
 ;cruise
 (def last-throttle-updated-at-time (systime))
 (def last-throttle-dead-min 0)
@@ -108,6 +105,10 @@
 (def cruise-after-sec 5)
 (def cruise-dead-zone 0.1)
 (def cruise-enabled 0)
+
+(define thr 0)
+(define real-thr 0)
+(define brake 0)
 
 (if (= software-adc 1)
     (app-adc-detach 3 1)
@@ -184,12 +185,20 @@
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
-        (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
         (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-       
+        (set 'real-thr (/(bufget-u8 uart-buf 5) 77.2))
+
+        (if (< brake min-brake-val)
+            {
+                 (set 'thr real-thr)
+            }
+        )
 
         (if (>= brake min-brake-val)
-            (disable-cruise "brake")
+            {
+                (disable-cruise "brake")
+                (set 'thr 0)
+            }
         )
 
         (if (<= thr min-thr-val)
@@ -321,17 +330,15 @@
         )
 
         ; beep field
-        (if (= lock 1)
-            (if (> current-speed min-speed)
-                (bufset-u8 tx-frame 10 beep-time) ; beep lock
-                (bufset-u8 tx-frame 10 0))
-            (if (> feedback 0)
-                {
-                    (bufset-u8 tx-frame 10 beep-time)
-                    (set 'feedback (- feedback 1))
-                }
-                (bufset-u8 tx-frame 10 0)
-            )
+        (if (>= feedback 0)
+            {
+                (bufset-u8 tx-frame 10 beep-time)
+                (set 'feedback (- feedback 1))
+            }
+        )
+
+        (if (< feedback 0)
+            (bufset-u8 tx-frame 10 0)
         )
 
         ; speed field
@@ -428,14 +435,15 @@
         (if (>= presses 2) ; double press
             {
                 (if (> (get-adc-decoded 1) min-adc-brake) ; if brake is pressed
-                    (if (and (= secret-enabled 1) (> (get-adc-decoded 0) min-adc-throttle))
+                    (if (and (= secret-enabled 1) (> real-thr min-adc-throttle))
                         {
-                             (set 'unlock (bitwise-xor unlock 1))
-                             (if (= unlock 0)
+                            (set 'unlock (bitwise-xor unlock 1))
+                            (if (= unlock 0)
                                 (beep 2 1)
                                 (beep 1 2)
-                             )
+                            )
 
+                            (printf (str-merge "unlock: " (str-from-n unlock)))
                             (apply-mode)
                         }
                         {
