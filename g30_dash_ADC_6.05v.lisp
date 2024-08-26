@@ -1,20 +1,20 @@
-; G30 dashboard compability lisp script v0.9 by AKA13 and 1zuna
-; UART Wiring: red=5V black=GND yellow=COM-TX (UART-HDX) green=COM-RX (button)+3.3V with 1K Resistor
-; Guide (German): https://rollerplausch.com/threads/vesc-controller-einbau-1s-pro2-g30.6032/
-; Tested on VESC 6.05 BETA on G30D w/ MP2
-
 (define boot-time (systime))
 (def feedback 0)
 (def beep-time 1)
 
 (def hi-temp-fet 60)
-(def hi-temp-motor 115)
+(def hi-temp-motor 140)
+
+;timeout
+(define ble-timeout (* 30 60))
+(define last-action-time (systime))
+(define secs-left 0)
 
 ; -> User parameters (change these to your needs)
 (def software-adc 1)
 (def min-adc-throttle 0.1)
 (def min-adc-brake 0.1)
-(def min-brake-val 0.55)
+(def min-brake-val 0.50)
 (def min-thr-val 0.55)
 
 (def show-batt-in-idle 1)
@@ -31,14 +31,13 @@
 (define drive-speed (/ 25 3.6))
 (define drive-current 1)
 (define drive-watts 2000)
-(define sport-speed (/ 28 3.6))
+(define sport-speed (/ 26 3.6))
 (define sport-current 1.0)
 (define sport-watts 2500)
 
 (define def-motor-max 90)
 (define def-motor-abs 140)
 
-; Secret speed modes. To enable, press the button 2 times while holding break and throttle at the same time.
 (def secret-enabled 1)
 (def secret-eco-fw 0)
 (def secret-drive-fw 0)
@@ -58,12 +57,10 @@
 (define secret-sport-watts 3000)
 
 (define secret-motor-max 110)
-(define secret-motor-abs 170)
+(define secret-motor-abs 200)
 
 ;backlights
 (define back-enabled 1)
-
-
 
 ; -> Code starts here (DO NOT CHANGE ANYTHING BELOW THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING)
 
@@ -146,6 +143,16 @@
         (sleep 0.05)
 })
 
+(loopwhile-thd 100 t {
+        (if (> secs-left ble-timeout)
+            (if (= off 0)
+                (shut-down-ble)
+            )
+        )
+
+        (sleep 1)
+})
+
 (defun beep(time count)
     {
         ;(printf (str-merge "beep time(" (str-from-n time) ") count(" (str-from-n count) ")"))
@@ -177,9 +184,21 @@
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
+        (var testThr (/(bufget-u8 uart-buf 5) 77.2))
 
         (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-        (set 'thr (/(bufget-u8 uart-buf 5) 77.2)) ; 255/3.3 = 77.2
+        (if (> testThr min-thr-val)
+            (if (< brake min-brake-val)
+                {
+                    (set 'thr testThr) ; 255/3.3 = 77.2
+                }
+            )
+        )
+        (if (< testThr min-thr-val)
+             (if (> brake min-brake-val)
+                (set 'thr 0)
+             )
+        )
 
         (if (>= brake min-brake-val)
             (disable-cruise "brake")
@@ -217,17 +236,39 @@
                 (if (> brake 3.3)
                     (setf brake 3.3))
 
-                ; Pass through throttle and brake to VESC
+                ; Pass through throttle and brk to VESC
                 (app-adc-override 0 thr)
                 (app-adc-override 1 brake)
-            }
-        )
 
-         (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
-            (if (!= cruise-enabled 1)
-                (enable-cruise thr)
-            )
-        )
+                ; time-out
+                (if (= off 0)
+                    (if (> thr min-thr-val)
+                            (setvar 'last-action-time (systime))
+                    )
+                )
+
+                (if (= off 0)
+                    (if (> current-speed 1)
+                            (setvar 'last-action-time (systime))
+                    )
+                )
+
+                (if (= off 0)
+                    (if (> brake min-brake-val)
+                            (setvar 'last-action-time (systime))
+                    )
+                )
+                (if (= off 0)
+                    (setvar 'secs-left (secs-since last-action-time))
+                )
+                    }
+                )
+
+                (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
+                    (if (!= cruise-enabled 1)
+                        (enable-cruise thr)
+                    )
+                )
     }
 )
 
@@ -255,8 +296,8 @@
             {
                 (set-current-rel 0) ; No current input when locked
                 (if (> (* (get-speed) 3.6) min-speed)
-                    (set-brake-rel 1) ; Full power brake
-                    (set-brake-rel 0) ; No brake
+                    (set-brake-rel 1) ; Full power brk
+                    (set-brake-rel 0) ; No brk
                 )
             }
         )
@@ -267,6 +308,8 @@
     {
         (var current-speed (* (l-speed) 3.6))
         (var battery (*(get-batt) 100))
+        (set 'battery (+ battery 4))
+
 
         ; mode field (1=drive, 2=eco, 4=sport, 8=charge, 16=off, 32=lock)
         (if (= off 1)
@@ -375,8 +418,9 @@
         (gpio-write 'pin-swclk 1) ; enable break light
         (set 'unlock 0)
         (setvar 'back-enabled 1)
-        (setvar 'off 0) ; turn on
         (apply-mode) ; Apply mode on start-up
+        (setvar 'last-action-time (systime))
+        (setvar 'off 0) ; turn on
     }
 )
 
@@ -387,7 +431,7 @@
             (turn-on-ble)
             {
                 (if (<= (get-speed) button-safety-speed)
-                    (if (<= brake 0.52)
+                    (if (<= brake min-brake-val)
                         (set 'light (bitwise-xor light 1)) ; toggle light
                     )
                 )
@@ -440,8 +484,8 @@
         (set 'back-enabled 0)  ; disable break light
         (set 'light 0) ; disable front light
         (beep 2 1)
+        (set 'secs-left 0)
         (set 'off 1) ; turn off
-
 
         ;(setvar 'secs-left 0)
         ;(conf-store)
