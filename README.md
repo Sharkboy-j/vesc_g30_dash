@@ -3,11 +3,12 @@
 ![image](guide/imgs/cruise.png)
 - [x] Cruise control after 5 sec (disable after pressing brake or throttle) (box should be enabled in App Settings -> ADC -> General -> Button Inputs Enable Cruise Control)
 - [x] 0km/h start speed !!!!BE CAREFULL!!!!
-- [x] Add timeout shutdown for BLE after 30 mins
+- [x] Add timeout shutdown for BLE after 7 mins
 - [x] Always show battery percentage on idle. Show speed only when you are running.
 - [x] Long beep after shutdown. Small beep when turn on.
-- [x] Break lights flashing from vesc. Should be connected to servo 'pin-swclk"
+- [x] Break lights flashing from vesc. Should be connected to servo 'pin-ppm"
 - [x] Secret mode - double beep. Default mode single beep
+- [x] Visual code A5 on speedometer dash and zero of battery when secret mode activated? also with double beep. Default mode single beep and 0 code on speedometer dash
 - [x] You can change gears (speed mode) while running.
 - [x] Regenerative brake enables after 1 km\h
 - [x] Disable option to shut down BLE while you are running
