@@ -113,10 +113,12 @@
 )
 
 (defun printf(msg)
-    {
-        (var res (secs-since boot-time))
-        (print (str-merge (str-from-n res "%.2fs") ": " msg))
-    }
+    (if (= off 0)
+        {
+            (var res (secs-since boot-time))
+            (puts (str-merge (str-from-n res "%.2fs") ": " msg))
+        }
+    )
 )
 
 ;breaklight logic
@@ -370,7 +372,17 @@
             {
                 (if (> current-speed 1)
                     (bufset-u8 tx-frame 11 current-speed)
-                    (bufset-u8 tx-frame 11 battery)
+                    {
+                        (if (> brake min-brake-val)
+                            {
+                                (if (> real-thr min-thr-val)
+                                    (bufset-u8 tx-frame 11 (* (get-ah) 1000))
+                                    (bufset-u8 tx-frame 11 (get-vin))
+                                )
+                            }
+                            (bufset-u8 tx-frame 11 battery)
+                        )
+                    }
                 )
             }
         )
@@ -399,6 +411,7 @@
     (loopwhile t
         {
             (uart-read-bytes uart-buf 3 0)
+
             (if (= (bufget-u16 uart-buf 0) 0x5aa5)
                 {
                     (var len (bufget-u8 uart-buf 2))
@@ -406,13 +419,12 @@
                     (if (and (> len 0) (< len 60)) ; max 64 bytes
                         {
                             (uart-read-bytes uart-buf (+ len 6) 0) ;read remaining 6 bytes + payload, overwrite buffer
-
                             (let ((code (bufget-u8 uart-buf 2)) (checksum (bufget-u16 uart-buf (+ len 4))))
                                 {
                                     (looprange i 0 (+ len 4) (set 'crc (+ crc (bufget-u8 uart-buf i))))
 
                                     (if (= checksum (bitwise-and (+ (shr (bitwise-xor crc 0xFFFF) 8) (shl (bitwise-xor crc 0xFFFF) 8)) 65535)) ;If the calculated checksum matches with sent checksum, forward comman
-                                        (handle-frame code)
+                                            (handle-frame code)
                                     )
                                 }
                             )
@@ -427,7 +439,9 @@
 (defun handle-frame(code)
     {
         (if (and (= code 0x65) (= software-adc 1))
-            (adc-input uart-buf)
+            {
+                (adc-input uart-buf)
+            }
         )
 
         (if(= code 0x64)
@@ -446,6 +460,7 @@
         (setvar 'back-enabled 1)
         (apply-mode) ; Apply mode on start-up
         (setvar 'last-action-time (systime))
+        (stats-reset)
         (setvar 'off 0) ; turn on
     }
 )
