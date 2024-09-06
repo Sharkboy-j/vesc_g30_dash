@@ -1,19 +1,13 @@
 (define boot-time (systime))
-(def feedback 0)
-(def beep-time 1)
 
 (def hi-temp-fet 60)
-(def hi-temp-motor 140)
+(def hi-temp-motor 120)
 
 ;timeout
-(define ble-timeout (* 30 60))
-(define last-action-time (systime))
-(define secs-left 0)
+(define ble-timeout (* 7 60))
 
 ; -> User parameters (change these to your needs)
-(def software-adc 1)
-(def min-adc-throttle 0.1)
-(def min-adc-brake 0.1)
+
 (def min-brake-val 0.50)
 (def min-thr-val 0.55)
 
@@ -25,12 +19,15 @@
 (def eco-fw 0)
 (def drive-fw 0)
 (def sport-fw 0)
+
 (define eco-speed (/ 15 3.6))
 (define eco-current 0.8)
 (define eco-watts 1500)
+
 (define drive-speed (/ 25 3.6))
 (define drive-current 1)
 (define drive-watts 2000)
+
 (define sport-speed (/ 26 3.6))
 (define sport-current 1.0)
 (define sport-watts 2500)
@@ -38,37 +35,31 @@
 (define def-motor-max 90)
 (define def-motor-abs 140)
 
-(def secret-enabled 1)
-(def secret-eco-fw 0)
-(def secret-drive-fw 0)
-(def secret-sport-fw 15)
-
-(define secret-enabled 1)
-(define secret-eco-speed (/ 40 3.6))
+;secret mode
+(define secret-eco-speed (/ 37 3.6))
 (define secret-eco-current 1)
-(define secret-eco-watts 1500)
+(define secret-eco-watts 3000)
+(def secret-eco-fw 0)
 
 (define secret-drive-speed (/ 99 3.6))
 (define secret-drive-current 1)
-(define secret-drive-watts 2000)
+(define secret-drive-watts 3500)
+(def secret-drive-fw 0)
 
 (define secret-sport-speed (/ 99 3.6))
-(define secret-sport-current 1.0)
-(define secret-sport-watts 3000)
+(define secret-sport-current 1)
+(define secret-sport-watts 4000)
+(def secret-sport-fw 0)
 
 (define secret-motor-max 110)
 (define secret-motor-abs 200)
 
-;backlights
-(define back-enabled 1)
 
 ; -> Code starts here (DO NOT CHANGE ANYTHING BELOW THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING)
-
 ; Load VESC CAN code serer
 (import "pkg@://vesc_packages/lib_code_server/code_server.vescpkg" 'code-server)
 (read-eval-program code-server)
 (app-adc-override 3 0)
-
 ; Packet handling
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
@@ -82,15 +73,20 @@
 (bufset-u16 tx-frame 5 0x6400) ; Packet is from ESC to BLE
 (def uart-buf (array-create 64))
 
+(define back-enabled 1)
+(def software-adc 1)
+(def min-adc-throttle 0.1)
+(def min-adc-brake 0.1)
+
+(define last-action-time (systime))
+(define secs-left 0)
+
 ; Button handling
-
 (def presstime (systime))
-
-
+(def feedback 0)
+(def beep-time 1)
 
 ; Mode states
-
-
 (def lock 0)
 (def speedmode 4)
 (def light 0)
@@ -109,6 +105,7 @@
 (define thr 0)
 (define real-thr 0)
 (define brake 0)
+(define mode-changed 0)
 
 (if (= software-adc 1)
     (app-adc-detach 3 1)
@@ -122,6 +119,7 @@
     }
 )
 
+;breaklight logic
 (loopwhile-thd 100 t {
         (if (= back-enabled 1) ; it is locked and off?
             {
@@ -144,6 +142,7 @@
         (sleep 0.05)
 })
 
+;timout logic
 (loopwhile-thd 100 t {
         (if (> secs-left ble-timeout)
             (if (= off 0)
@@ -185,12 +184,23 @@
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
-        (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-        (set 'real-thr (/(bufget-u8 uart-buf 5) 77.2))
+          (if (not (= brake (/(bufget-u8 uart-buf 6) 77.2)))
+            {
+                (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
+                (printf (str-merge "brake => " (str-from-n brake)))
+            }
+        )
+
+        (if (not (= real-thr (/(bufget-u8 uart-buf 5) 77.2)))
+            {
+                (set 'real-thr (/(bufget-u8 uart-buf 5) 77.2))
+                (printf (str-merge "thr => " (str-from-n real-thr)))
+            }
+        )
 
         (if (< brake min-brake-val)
             {
-                 (set 'thr real-thr)
+                 (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
             }
         )
 
@@ -313,7 +323,7 @@
             (bufset-u8 tx-frame 7 16)
             (if (= lock 1)
                 (bufset-u8 tx-frame 7 32) ; lock display
-                (if (or (> (get-temp-fet) hi-temp-fet) (> (get-temp-mot) hi-temp-motor)) ; temp icon will show up above 60 degree
+                (if (or (> (get-temp-fet) hi-temp-fet) (> (get-temp-mot) hi-temp-motor)) ; temp icon
                     (bufset-u8 tx-frame 7 (+ 128 speedmode))
                     (bufset-u8 tx-frame 7 speedmode)
                 )
@@ -321,7 +331,15 @@
         )
 
         ; batt field
-        (bufset-u8 tx-frame 8 battery)
+        ;(bufset-u8 tx-frame 8 battery)
+        (if (> mode-changed 0)
+            {
+                (bufset-u8 tx-frame 8 0)
+                (set 'mode-changed (- mode-changed 1))
+            }
+            (bufset-u8 tx-frame 8 battery)
+        )
+
 
         ; light field
         (if (= off 0)
@@ -342,13 +360,26 @@
         )
 
         ; speed field
-        (if (> current-speed 1)
-            (bufset-u8 tx-frame 11 current-speed)
-            (bufset-u8 tx-frame 11 battery)
+        (if (> mode-changed 0)
+            {
+                (if (= unlock 1)
+                    (bufset-u8 tx-frame 11 105)
+                    (bufset-u8 tx-frame 11 0)
+                )
+            }
+            {
+                (if (> current-speed 1)
+                    (bufset-u8 tx-frame 11 current-speed)
+                    (bufset-u8 tx-frame 11 battery)
+                )
+            }
         )
+
+
 
         ; error field
         (bufset-u8 tx-frame 12 (get-fault))
+
 
         ; calc crc
 
@@ -425,19 +456,22 @@
         (if (= off 1) ; is it off? turn on scooter again
             (turn-on-ble)
             {
-                (if (<= (get-speed) button-safety-speed)
-                    (if (<= brake min-brake-val)
+                (if (and (<= (get-speed) button-safety-speed) (< brake min-brake-val) (= lock 0) (< real-thr min-thr-val))
+                    {
+                        ;(def min-brake-val 0.50)
+                        (printf (str-merge "ligh enabled: brake => " (str-from-n brake) " | " (to-str (< brake min-brake-val))))
                         (set 'light (bitwise-xor light 1)) ; toggle light
-                    )
+                    }
                 )
             }
         )
         (if (>= presses 2) ; double press
             {
-                (if (> (get-adc-decoded 1) min-adc-brake) ; if brake is pressed
-                    (if (and (= secret-enabled 1) (> real-thr min-adc-throttle))
+                (if (> (get-adc-decoded 1) min-brake-val) ; if brake is pressed
+                    (if (> real-thr min-thr-val)
                         {
                             (set 'unlock (bitwise-xor unlock 1))
+                            (setvar 'mode-changed 30)
                             (if (= unlock 0)
                                 (beep 2 1)
                                 (beep 1 2)
@@ -493,6 +527,7 @@
         (if (= (+ lock off) 0) ; it is locked and off?
             (shut-down-ble)
         )
+        (printf "long press btn")
     }
 )
 
@@ -500,6 +535,7 @@
     {
         (set 'presstime (systime)) ; reset press time again
         (set 'presses 0)
+        (printf "btn presses => 0 RESET")
     }
 )
 
@@ -521,7 +557,7 @@
             (if (= speedmode 2)
                 (configure-speed secret-eco-speed secret-eco-watts secret-eco-current secret-eco-fw def-motor-max def-motor-abs)
                 (if (= speedmode 4)
-                    (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-sport-fw secret-motor-max secret-motor-abs)
+                        (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-sport-fw secret-motor-max secret-motor-abs)
                 )
             )
         )
@@ -591,6 +627,7 @@
                 (if (> buttonold button)
                     {
                         (set 'presses (+ presses 1))
+                        (printf (str-merge "btn presses => " (str-from-n presses)))
                         (set 'presstime (systime))
                     }
                     (button-apply button)
@@ -609,9 +646,9 @@
         (var is-active (or (= off 1) (and (<= (get-speed) button-safety-speed) (< (abs (get-current 0)) 0.1))))
         ;(var is-active (= off 1))
 
-        (if (> time-passed 2500) ; after 2500 ms
+        (if (> time-passed 4500) ; after 2500 ms
             (if (= button 0) ; check button is still pressed
-                (if (> time-passed 6000) ; long press after 6000 ms
+                (if (> time-passed 8000) ; long press after 6000 ms
                     {
                         (if (= off 0)
                             (handle-holding-button)
