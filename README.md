@@ -14,7 +14,7 @@
 - [x] Disable option to shut down BLE while you are running
 - [x] Force front light disabling after shutdown
 - [x] [6.05] When current speed < 0 will show the distance traveled since start in meters when brake pressed
-- [x] [6.05] When current speed < 0 will show the in voltage when brake and throttle pressed at the same time
+- [x] [6.05] When current speed < 0 will show the 1 cell battery voltage when brake and throttle pressed at the same time
 
 # VESC M365 Dash
 Allows you to connect your NINEBOT G30 display to VESC controller.

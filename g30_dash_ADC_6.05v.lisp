@@ -106,6 +106,7 @@
 (define real-thr 0)
 (define brake 0)
 (define mode-changed 0)
+(def light-times 0)
 
 (if (= software-adc 1)
     (app-adc-detach 3 1)
@@ -123,7 +124,7 @@
 
 ;breaklight logic
 (loopwhile-thd 100 t {
-        (if (= back-enabled 1) ; it is locked and off?
+        (if (and (= back-enabled 1) (> (get-speed) 0))
             {
                 (if (> brake min-brake-val)
                     {
@@ -168,35 +169,39 @@
         {
             (setvar 'cruise-enabled 0)
             (app-adc-override 3 0)
-            (printf (str-merge "DISABLE cruise by " handler))
+            ;(printf (str-merge "DISABLE cruise by " handler))
         }
     )
 )
 
 (defun enable-cruise(thr)
-    {
-        (printf "enable cruise")
-        (setvar 'cruise-enabled 1)
-        (app-adc-override 3 thr)
-        (beep 2 2)
-    }
+    (if (> (get-speed) 0)
+        {
+            ;(printf "enable cruise")
+            (setvar 'cruise-enabled 1)
+            (app-adc-override 3 thr)
+            (set 'light-times 6)
+            (beep 2 2)
+        }
+    )
 )
 
 (defun adc-input(buffer) ; Frame 0x65
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
+
           (if (not (= brake (/(bufget-u8 uart-buf 6) 77.2)))
             {
                 (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-                (printf (str-merge "brake => " (str-from-n brake)))
+                ;(printf (str-merge "brake => " (str-from-n brake)))
             }
         )
 
         (if (not (= real-thr (/(bufget-u8 uart-buf 5) 77.2)))
             {
                 (set 'real-thr (/(bufget-u8 uart-buf 5) 77.2))
-                (printf (str-merge "thr => " (str-from-n real-thr)))
+                ;(printf (str-merge "thr => " (str-from-n real-thr)))
             }
         )
 
@@ -339,14 +344,25 @@
                 (bufset-u8 tx-frame 8 0)
                 (set 'mode-changed (- mode-changed 1))
             }
-            (bufset-u8 tx-frame 8 battery)
+            (if (and (> brake min-brake-val) (<= (get-speed) 0))
+                (bufset-u8 tx-frame 8 0)
+                (bufset-u8 tx-frame 8 battery)
+            )
         )
 
-
         ; light field
-        (if (= off 0)
-            (bufset-u8 tx-frame 9 light)
-            (bufset-u8 tx-frame 9 0)
+        (if (> light-times 0)
+            {
+                (set 'light (bitwise-xor light 1))
+                (bufset-u8 tx-frame 9 light)
+                (define light-times (- light-times 1))
+            }
+            {
+               (if (= off 0)
+                    (bufset-u8 tx-frame 9 light)
+                    (bufset-u8 tx-frame 9 0)
+               )
+            }
         )
 
         ; beep field
@@ -376,8 +392,8 @@
                         (if (> brake min-brake-val)
                             {
                                 (if (> real-thr min-thr-val)
-                                    (bufset-u8 tx-frame 11 (* (get-ah) 1000))
-                                    (bufset-u8 tx-frame 11 (get-vin))
+                                    (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
+                                    (bufset-u8 tx-frame 11 (* (/ (get-vin) 15) 10))
                                 )
                             }
                             (bufset-u8 tx-frame 11 battery)
@@ -413,6 +429,7 @@
             (uart-read-bytes uart-buf 3 0)
 
             (if (= (bufget-u16 uart-buf 0) 0x5aa5)
+                (if (or(= (bufget-u8 uart-buf 2) 5) (= (bufget-u8 uart-buf 2) 7))
                 {
                     (var len (bufget-u8 uart-buf 2))
                     (var crc len)
@@ -430,7 +447,8 @@
                             )
                         }
                     )
-                }
+                })
+
             )
         }
     )
@@ -465,7 +483,6 @@
     }
 )
 
-
 (defun handle-button()
     (if (= presses 1) ; single press
         (if (= off 1) ; is it off? turn on scooter again
@@ -474,7 +491,7 @@
                 (if (and (<= (get-speed) button-safety-speed) (< brake min-brake-val) (= lock 0) (< real-thr min-thr-val))
                     {
                         ;(def min-brake-val 0.50)
-                        (printf (str-merge "ligh enabled: brake => " (str-from-n brake) " | " (to-str (< brake min-brake-val))))
+                        ;(printf (str-merge "ligh enabled: brake => " (str-from-n brake) " | " (to-str (< brake min-brake-val))))
                         (set 'light (bitwise-xor light 1)) ; toggle light
                     }
                 )
@@ -492,7 +509,7 @@
                                 (beep 1 2)
                             )
 
-                            (printf (str-merge "unlock: " (str-from-n unlock)))
+                            ;(printf (str-merge "unlock: " (str-from-n unlock)))
                             (apply-mode)
                         }
                         {
@@ -542,7 +559,7 @@
         (if (= (+ lock off) 0) ; it is locked and off?
             (shut-down-ble)
         )
-        (printf "long press btn")
+        ;(printf "long press btn")
     }
 )
 
@@ -550,7 +567,7 @@
     {
         (set 'presstime (systime)) ; reset press time again
         (set 'presses 0)
-        (printf "btn presses => 0 RESET")
+        ;(printf "btn presses => 0 RESET")
     }
 )
 
@@ -588,9 +605,9 @@
         (set-param 'l-abs-current-max motor-abs) ; motor abs max
         (set-param 'foc-fw-current-max fw)
 
-        (printf (str-merge "configure-speed=> motorMax:" (str-from-n (conf-get 'l-current-max)) " motorAbs:" (str-from-n (conf-get 'l-abs-current-max))
-        " fw:" (str-from-n (conf-get 'foc-fw-current-max))
-        ))
+        ;(printf (str-merge "configure-speed=> motorMax:" (str-from-n (conf-get 'l-current-max)) " motorAbs:" (str-from-n (conf-get 'l-abs-current-max))
+        ;" fw:" (str-from-n (conf-get 'foc-fw-current-max))
+        ;))
 
         (if (!= beep-time 2)
              (beep 1 1)
@@ -642,7 +659,7 @@
                 (if (> buttonold button)
                     {
                         (set 'presses (+ presses 1))
-                        (printf (str-merge "btn presses => " (str-from-n presses)))
+                        ;(printf (str-merge "btn presses => " (str-from-n presses)))
                         (set 'presstime (systime))
                     }
                     (button-apply button)
