@@ -1,5 +1,5 @@
 (define boot-time (systime))
-
+(def cells 15)
 (def hi-temp-fet 60)
 (def hi-temp-motor 120)
 
@@ -393,7 +393,7 @@
                             {
                                 (if (> real-thr min-thr-val)
                                     (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
-                                    (bufset-u8 tx-frame 11 (* (/ (get-vin) 15) 10))
+                                    (bufset-u8 tx-frame 11 (* (/ (get-vin) cells) 10))
                                 )
                             }
                             (bufset-u8 tx-frame 11 battery)
@@ -448,7 +448,7 @@
                         }
                     )
                 })
-                
+
             )
         }
     )
