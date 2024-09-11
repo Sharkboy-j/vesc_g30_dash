@@ -448,7 +448,7 @@
                         }
                     )
                 })
-
+                
             )
         }
     )
@@ -478,7 +478,6 @@
         (setvar 'back-enabled 1)
         (apply-mode) ; Apply mode on start-up
         (setvar 'last-action-time (systime))
-        (stats-reset)
         (setvar 'off 0) ; turn on
     }
 )
