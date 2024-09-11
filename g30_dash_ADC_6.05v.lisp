@@ -62,8 +62,7 @@
 ; Packet handling
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
-(gpio-configure 'pin-swdio 'pin-mode-out); deck_light
-(gpio-configure 'pin-swclk 'pin-mode-out); break_light
+(gpio-configure 'pin-ppm 'pin-mode-out); break_light
 
 (define tx-frame (array-create 15))
 (bufset-u16 tx-frame 0 0x5AA5) ;Ninebot protocol
@@ -127,15 +126,15 @@
             {
                 (if (> brake min-brake-val)
                     {
-                        (gpio-write 'pin-swclk (bitwise-xor (gpio-read 'pin-swclk) 1))
+                        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
                         (sleep (/ 1.0 10))
-                        (gpio-write 'pin-swclk (bitwise-xor (gpio-read 'pin-swclk) 1))
+                        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
                         (sleep (*(/ 1.0 10)0.25))
                     }
                 )
                 (if (< brake min-brake-val)
                     {
-                        (gpio-write 'pin-swclk 1)
+                        (gpio-write 'pin-ppm 1)
                     }
                 )
             }
@@ -471,8 +470,7 @@
     {
         (app-adc-override 3 0) ; disable cruise button
         (beep 1 1)
-        (gpio-write 'pin-swdio 1) ; enable deck light
-        (gpio-write 'pin-swclk 1) ; enable break light
+        (gpio-write 'pin-ppm 1) ; enable break light
         (set 'unlock 0)
         (setvar 'back-enabled 1)
         (apply-mode) ; Apply mode on start-up
@@ -539,8 +537,7 @@
         (set 'unlock 0) ; Disable unlock on turn off
         (apply-mode)
         (set 'off 1) ; turn off
-        (gpio-write 'pin-swdio 0) ; disable deck light
-        (gpio-write 'pin-swclk 0) ; disable break light
+        (gpio-write 'pin-ppm 0) ; disable break light
         (set 'back-enabled 0)  ; disable break light
         (set 'light 0) ; disable front light
         (beep 2 1)
