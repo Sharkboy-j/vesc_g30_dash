@@ -307,7 +307,7 @@
         (if (= lock 1)
             {
                 (set-current-rel 0) ; No current input when locked
-                (if (> (* (get-speed) 3.6) min-speed)
+                (if (> (abs (* (get-speed) 3.6)) min-speed)
                     (set-brake-rel 1) ; Full power brk
                     (set-brake-rel 0) ; No brk
                 )
@@ -645,7 +645,7 @@
         (loopwhile t
             {
                 (var button (gpio-read 'pin-rx))
-                (sleep 0.05) ; wait 50 ms to debounce
+                (sleep 0.025) ; wait 25 ms to debounce
                 (var buttonconfirm (gpio-read 'pin-rx))
                 (if (not (= button buttonconfirm))
                     (set 'button 0)
