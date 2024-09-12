@@ -7,7 +7,7 @@
 
 ; -> User parameters (change these to your needs)
 
-(def min-brake-val 0.50)
+(def min-brake-val 0.55)
 (def min-thr-val 0.55)
 
 (def show-batt-in-idle 1)
@@ -65,10 +65,10 @@
 (gpio-configure 'pin-ppm 'pin-mode-out); break_light
 
 (define tx-frame (array-create 15))
-(bufset-u16 tx-frame 0 0x5AA5) ;Ninebot protocol
-(bufset-u8 tx-frame 2 0x06) ;Payload length is 5 bytes
-(bufset-u16 tx-frame 3 0x2021) ; Packet is from ESC to BLE
-(bufset-u16 tx-frame 5 0x6400) ; Packet is from ESC to BLE
+(bufset-u16 tx-frame 0 0x5AA5)        ;Ninebot protocol
+(bufset-u8 tx-frame 2 0x06)           ;Payload length is 5 bytes
+(bufset-u16 tx-frame 3 0x2021)        ;Packet is from ESC to BLE
+(bufset-u16 tx-frame 5 0x6400)        ;Packet is from ESC to BLE
 (def uart-buf (array-create 64))
 
 (define back-enabled 1)
@@ -111,14 +111,14 @@
     (app-adc-detach 3 0)
 )
 
-(defun printf(msg)
-    (if (= off 0)
-        {
-            (var res (secs-since boot-time))
-            (puts (str-merge (str-from-n res "%.2fs") ": " msg))
-        }
-    )
-)
+;(defun printf(msg)
+;    (if (= off 0)
+;        {
+;            (var res (secs-since boot-time))
+;            (puts (str-merge (str-from-n res "%.2fs") ": " msg))
+;        }
+;    )
+;)
 
 ;breaklight logic
 (loopwhile-thd 100 t {
