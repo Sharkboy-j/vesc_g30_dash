@@ -1,5 +1,5 @@
 (define boot-time (systime))
-(def hi-temp-fet 60)
+(def hi-temp-fet 85)
 (def hi-temp-motor 120)
 
 ;timeout
@@ -18,40 +18,49 @@
 (def eco-fw 0)
 (def drive-fw 0)
 (def sport-fw 0)
+(def secret-eco-fw 0)
+(def secret-drive-fw 0)
+(def secret-sport-fw 10)
+
+(define def-motor-max 90)
+(define def-motor-abs 140)
+(define secret-motor-max 120)
+(define secret-motor-abs 210)
 
 (define eco-speed (/ 15 3.6))
 (define eco-current 0.8)
 (define eco-watts 1500)
 
-(define drive-speed (/ 25 3.6))
+(define drive-speed (/ 20 3.6))
 (define drive-current 1)
 (define drive-watts 2000)
 
-(define sport-speed (/ 26 3.6))
+(define sport-speed (/ 25 3.6))
 (define sport-current 1.0)
 (define sport-watts 2500)
-
-(define def-motor-max 90)
-(define def-motor-abs 140)
 
 ;secret mode
 (define secret-eco-speed (/ 37 3.6))
 (define secret-eco-current 1)
 (define secret-eco-watts 3000)
-(def secret-eco-fw 0)
 
 (define secret-drive-speed (/ 99 3.6))
 (define secret-drive-current 1)
 (define secret-drive-watts 3500)
-(def secret-drive-fw 0)
 
 (define secret-sport-speed (/ 99 3.6))
 (define secret-sport-current 1)
 (define secret-sport-watts 4000)
-(def secret-sport-fw 0)
+(define last-temp-time (systime))
+(define last-temp-time-activated (systime))
 
-(define secret-motor-max 110)
-(define secret-motor-abs 200)
+
+
+
+
+
+
+
 
 
 ; -> Code starts here (DO NOT CHANGE ANYTHING BELOW THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING)
@@ -90,7 +99,7 @@
 (def light 0)
 (def unlock 0)
 (def presses 0)
-(def off 0)
+(def off 1)
 
 ;cruise
 (def last-throttle-updated-at-time (systime))
@@ -111,32 +120,32 @@
     (app-adc-detach 3 0)
 )
 
-;(defun printf(msg)
-;    (if (= off 0)
-;        {
-;            (var res (secs-since boot-time))
-;            (puts (str-merge (str-from-n res "%.2fs") ": " msg))
-;        }
-;    )
-;)
+(defun enable_brake()
+    {
+        (gpio-write 'pin-ppm 1)
+    }
+)
+
+(defun disable_brake()
+    {
+        (gpio-write 'pin-ppm 0)
+    }
+)
+
+(defun switch_brake()
+    {
+        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
+    }
+)
 
 ;breaklight logic
 (loopwhile-thd 100 t {
-        (if (and (= back-enabled 1) (> (get-speed) 0))
+        (if (and (= back-enabled 1) (> (get-speed) 1) (> brake min-brake-val))
             {
-                (if (> brake min-brake-val)
-                    {
-                        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
-                        (sleep (/ 1.0 10))
-                        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
-                        (sleep (*(/ 1.0 10)0.25))
-                    }
-                )
-                (if (< brake min-brake-val)
-                    {
-                        (gpio-write 'pin-ppm 1)
-                    }
-                )
+                (disable_brake)
+                (sleep (/ 1.0 10))
+                (enable_brake)
+                (sleep (*(/ 1.0 10)0.25))
             }
         )
 
@@ -309,7 +318,6 @@
                 (set-current-rel 0) ; No current input when locked
                 (if (> (abs (* (get-speed) 3.6)) min-speed)
                     (set-brake-rel 1) ; Full power brk
-                    (set-brake-rel 0) ; No brk
                 )
             }
         )
@@ -320,8 +328,9 @@
     {
         (var current-speed (* (l-speed) 3.6))
         (var battery (*(get-batt) 100))
-        (set 'battery (+ battery 4))
-
+        (if (> battery 0)
+            (set 'battery (+ battery 4))
+        )
 
         ; mode field (1=drive, 2=eco, 4=sport, 8=charge, 16=off, 32=lock)
         (if (= off 1)
@@ -404,14 +413,37 @@
 
 
         ; error field
-        (bufset-u8 tx-frame 12 (get-fault))
-
+        ;(secs-since last-temp-time)
+        (if (> (get-fault) 0)
+            {
+                (bufset-u8 tx-frame 12 (get-fault))
+            }
+            {
+                (if (> (secs-since last-temp-time) 10)
+                    {
+                        (if (< (secs-since last-temp-time) 16)
+                            {
+                                (bufset-u8 tx-frame 12 (get-temp-fet 0))
+                            }
+                            {
+                                (bufset-u8 tx-frame 12 0)
+                                (set 'last-temp-time (systime))
+                            }
+                        )
+                    }
+                    {
+                        (bufset-u8 tx-frame 12 0)
+                    }
+                )
+            }
+        )
 
         ; calc crc
 
         (var crcout 0)
         (looprange i 2 13
-        (set 'crcout (+ crcout (bufget-u8 tx-frame i))))
+            (set 'crcout (+ crcout (bufget-u8 tx-frame i)))
+        )
         (set 'crcout (bitwise-xor crcout 0xFFFF))
         (bufset-u8 tx-frame 13 crcout)
         (bufset-u8 tx-frame 14 (shr crcout 8))
@@ -470,9 +502,10 @@
     {
         (app-adc-override 3 0) ; disable cruise button
         (beep 1 1)
-        (gpio-write 'pin-ppm 1) ; enable break light
+        (setvar 'speedmode 2)
         (set 'unlock 0)
         (setvar 'back-enabled 1)
+        (enable_brake)
         (apply-mode) ; Apply mode on start-up
         (setvar 'last-action-time (systime))
         (setvar 'off 0) ; turn on
@@ -537,15 +570,12 @@
         (set 'unlock 0) ; Disable unlock on turn off
         (apply-mode)
         (set 'off 1) ; turn off
-        (gpio-write 'pin-ppm 0) ; disable break light
         (set 'back-enabled 0)  ; disable break light
+        (disable_brake)
         (set 'light 0) ; disable front light
         (beep 2 1)
         (set 'secs-left 0)
         (set 'off 1) ; turn off
-
-        ;(setvar 'secs-left 0)
-        ;(conf-store)
     }
 )
 
@@ -580,7 +610,7 @@
             )
         )
         (if (= speedmode 1)
-            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current secret-drive-fw def-motor-max def-motor-abs)
+            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current secret-drive-fw def-motor-max secret-motor-abs)
             (if (= speedmode 2)
                 (configure-speed secret-eco-speed secret-eco-watts secret-eco-current secret-eco-fw def-motor-max def-motor-abs)
                 (if (= speedmode 4)
@@ -695,7 +725,8 @@
 )
 
 ; Apply mode on start-up
-(apply-mode)
+;(apply-mode)
+(turn-on-ble)
 
 ; Spawn UART reading frames thread
 (spawn 150 read-frames)
