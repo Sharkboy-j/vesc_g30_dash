@@ -25,23 +25,6 @@
 (def sport-watts 2000)
 (def sport-fw 0)
 
-(def secret-enabled 1)
-(def secret-eco-speed (/ 37 3.6))
-(def secret-eco-current 1)
-(def secret-eco-watts 3000)
-(def secret-eco-fw 0)
-
-(define secret-drive-speed (/ 99 3.6))
-(define secret-drive-current 1)
-(define secret-drive-watts 3500)
-(def secret-drive-fw 0)
-
-(def secret-sport-speed (/ 99 3.6))
-(def secret-sport-current 1.0)
-(def secret-sport-watts 4000)
-
-(def secret-sport-fw 10)
-
 ; -> Code starts here (DO NOT CHANGE ANYTHING BELOW THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING)
 ; Load VESC CAN code serer
 (import "pkg@://vesc_packages/lib_code_server/code_server.vescpkg" 'code-server)
@@ -68,7 +51,6 @@
 (def lock 0)
 (def speedmode 1)
 (def light 0)
-(def unlock 0)
 (def mode-changed 0)
 
 ; timeout
@@ -328,14 +310,6 @@
         )
 
         ; speed field
-        (if (> mode-changed 0)
-            {
-                (if (= unlock 1)
-                    (bufset-u8 tx-frame 11 105)
-                    (bufset-u8 tx-frame 11 0)
-                )
-            }
-            {
                (if (= lock 1)
                     {
                         (bufset-u8 tx-frame 11 battery)
@@ -357,8 +331,6 @@
                         )
                     }
                )
-            }
-        )
 
         ; error field
         (if (= (get-fault) 0)
@@ -454,7 +426,6 @@
     {
         (app-adc-override 3 0) ; disable cruise button
         (set 'speedmode 2)
-        (set 'unlock 0)
         (set 'break-light-enabled 1)
         (enable_brake)
         (apply-mode) ; Apply mode on start-up
@@ -479,18 +450,12 @@
         (if (>= presses 2) ; double press
             {
                 (if (> (get-adc-decoded 1) min-adc-brake) ; if brake is pressed
-                    (if (and (= secret-enabled 1) (> (get-adc-decoded 0) min-adc-thr))
+                    (if (and (> (get-adc-decoded 0) min-adc-thr))
                         {
-                            (set 'unlock (bitwise-xor unlock 1))
-                            (set 'mode-changed 30)
-                            (if (= unlock 0)
-                                (beep 2 1)
-                                (beep 1 2)
-                            )
+                            (beep 1 2)
                             (apply-mode)
                         }
                         {
-                            (set 'unlock 0)
                             (apply-mode)
                             (set 'lock (bitwise-xor lock 1)) ; lock on or off
                             (beep 1 1) ; beep feedback
@@ -519,7 +484,6 @@
         (if (= (+ lock off) 0) ; it is locked and off?
             {
                 (app-adc-override 3 0) ; disable cruise button
-                (set 'unlock 0) ; Disable unlock on turn off
                 (apply-mode)
                 (set 'break-light-enabled 0)  ; disable break light
                 (disable_brake)
@@ -542,23 +506,12 @@
 ; Speed mode implementation
 
 (defun apply-mode()
-    (if (= unlock 0)
-        (if (= speedmode 1)
-            (configure-speed drive-speed drive-watts drive-current drive-fw)
-            (if (= speedmode 2)
-                (configure-speed eco-speed eco-watts eco-current eco-fw)
-                (if (= speedmode 4)
-                    (configure-speed sport-speed sport-watts sport-current sport-fw)
-                )
-            )
-        )
-        (if (= speedmode 1)
-            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current secret-drive-fw)
-            (if (= speedmode 2)
-                (configure-speed secret-eco-speed secret-eco-watts secret-eco-current secret-eco-fw)
-                (if (= speedmode 4)
-                    (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-sport-fw)
-                )
+    (if (= speedmode 1)
+        (configure-speed drive-speed drive-watts drive-current drive-fw)
+        (if (= speedmode 2)
+            (configure-speed eco-speed eco-watts eco-current eco-fw)
+            (if (= speedmode 4)
+                (configure-speed sport-speed sport-watts sport-current sport-fw)
             )
         )
     )
