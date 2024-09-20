@@ -50,7 +50,7 @@
 ; Packet handling
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
-(gpio-configure 'pin-hall3 'pin-mode-out); break_light
+(gpio-configure 'pin-ppm 'pin-mode-out); break_light
 
 (define tx-frame (array-create 15))
 (bufset-u16 tx-frame 0 0x5AA5) ;Ninebot protocol
@@ -83,6 +83,7 @@
 (def cruise-dead-zone 0.1)
 (def cruise-enabled 0)
 (def thr 0)
+(def real-thr-pos 0)
 (def light-times 0)
 
 ;break-light
@@ -107,19 +108,19 @@
 
 (defun enable_brake()
     {
-        (gpio-write 'pin-hall3 1)
+        (gpio-write 'pin-ppm 1)
     }
 )
 
 (defun disable_brake()
     {
-        (gpio-write 'pin-hall3 0)
+        (gpio-write 'pin-ppm 0)
     }
 )
 
 (defun switch_brake()
     {
-        (gpio-write 'pin-hall3 (bitwise-xor (gpio-read 'pin-hall3) 1))
+        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
     }
 )
 
@@ -169,6 +170,7 @@
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
         (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
         (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
+        (set 'real-thr-pos (/(bufget-u8 uart-buf 5) 77.2))
 
         (if (<= thr min-adc-thr)
             (setvar 'last-throttle-updated-at-time (systime))
@@ -330,7 +332,7 @@
                     {
                         (if (> brake min-adc-brake)
                             {
-                                (if (> thr min-adc-thr)
+                                (if (> real-thr-pos min-adc-thr)
                                     (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
                                     (bufset-u8 tx-frame 11 (* (/ (get-vin) (conf-get 'si-battery-cells)) 10))
                                 )

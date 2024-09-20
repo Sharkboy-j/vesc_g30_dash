@@ -11,11 +11,11 @@
 - [x] Regenerative brake enables after 1 km\h
 - [x] Disable option to shut down BLE while you are running
 - [x] Force front light disabling after shutdown
-- [x] [6.05] When current speed < 0 will show the distance traveled since start in meters when brake pressed
-- [x] [6.05] When current speed < 0 will show the 1 cell battery voltage when brake and throttle pressed at the same time
+- [x] [6.05] When current speed < 0 will show the distance traveled since start in meters when brake and throttle pressed
+- [x] [6.05] When current speed < 0 will show the 1 cell battery voltage when brake pressed at the same time (example: you got 3.843 volts on each cell, you will see 38 on dash)
 - [x] [6.05] Visual code A5 on speedometer dash and zero of battery when secret mode activated? also with double beep. Default mode single beep and 0 code on speedometer dash
 - [x] [6.05] Cruise control after 5 sec (disable after pressing brake or throttle) (box should be enabled in App Settings -> ADC -> General -> Button Inputs Enable Cruise Control)
-- [x] [6.05] Every 10 seconds will show mosfet controller temperature as error code 3 times in a row
+- [x] [6.05] Will show mosfet controller temperature as error code (red numbers)
 
 # VESC M365 Dash
 Allows you to connect your NINEBOT G30 display to VESC controller.
