@@ -1,105 +1,79 @@
-(define boot-time (systime))
-(def hi-temp-fet 85)
-(def hi-temp-motor 120)
+; G30 dashboard compability lisp script
+; UART Wiring: red=5V black=GND yellow=COM-TX (UART-HDX) green=COM-RX (button)+3.3V with 1K Resistor
+; Tested on VESC 6.05 using G30 BLE with spintend ubox Lite 100 100
+; Edited by Sharkboy; Thanks to AKA13 and 1zuna for original script
 
-;timeout
-(define ble-timeout (* 7 60))
+(def software-adc 1)
+(def min-adc-thr 0.55)
+(def min-adc-brake 0.55)
 
-; -> User parameters (change these to your needs)
-
-(def min-brake-val 0.55)
-(def min-thr-val 0.55)
-
-(def show-batt-in-idle 1)
 (def min-speed 1)
-(def button-safety-speed (/ 0.1 3.6)) ; disabling button above 0.1 km/h (due to safety reasons)
+(def button-safety-speed (/ 0.1 3.6))
 
-; Speed modes (km/h, watts, current scale)
+(def eco-speed (/ 7 3.6))
+(def eco-current 0.6)
+(def eco-watts 2000)
 (def eco-fw 0)
+
+(def drive-speed (/ 17 3.6))
+(def drive-current 0.7)
+(def drive-watts 2000)
 (def drive-fw 0)
+
+(def sport-speed (/ 25 3.6))
+(def sport-current 1.0)
+(def sport-watts 2000)
 (def sport-fw 0)
+
+(def secret-enabled 1)
+(def secret-eco-speed (/ 37 3.6))
+(def secret-eco-current 1)
+(def secret-eco-watts 3000)
 (def secret-eco-fw 0)
-(def secret-drive-fw 0)
-(def secret-sport-fw 10)
-
-(define def-motor-max 90)
-(define def-motor-abs 140)
-(define secret-motor-max 120)
-(define secret-motor-abs 210)
-
-(define eco-speed (/ 15 3.6))
-(define eco-current 0.8)
-(define eco-watts 1500)
-
-(define drive-speed (/ 20 3.6))
-(define drive-current 1)
-(define drive-watts 2000)
-
-(define sport-speed (/ 25 3.6))
-(define sport-current 1.0)
-(define sport-watts 2500)
-
-;secret mode
-(define secret-eco-speed (/ 37 3.6))
-(define secret-eco-current 1)
-(define secret-eco-watts 3000)
 
 (define secret-drive-speed (/ 99 3.6))
 (define secret-drive-current 1)
 (define secret-drive-watts 3500)
+(def secret-drive-fw 0)
 
-(define secret-sport-speed (/ 99 3.6))
-(define secret-sport-current 1)
-(define secret-sport-watts 4000)
-(define last-temp-time (systime))
-(define last-temp-time-activated (systime))
+(def secret-sport-speed (/ 99 3.6))
+(def secret-sport-current 1.0)
+(def secret-sport-watts 4000)
 
-
-
-
-
-
-
-
-
+(def secret-sport-fw 10)
 
 ; -> Code starts here (DO NOT CHANGE ANYTHING BELOW THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING)
 ; Load VESC CAN code serer
 (import "pkg@://vesc_packages/lib_code_server/code_server.vescpkg" 'code-server)
 (read-eval-program code-server)
-(app-adc-override 3 0)
+
 ; Packet handling
 (uart-start 115200 'half-duplex)
 (gpio-configure 'pin-rx 'pin-mode-in-pu)
-(gpio-configure 'pin-ppm 'pin-mode-out); break_light
+(gpio-configure 'pin-hall3 'pin-mode-out); break_light
 
 (define tx-frame (array-create 15))
-(bufset-u16 tx-frame 0 0x5AA5)        ;Ninebot protocol
-(bufset-u8 tx-frame 2 0x06)           ;Payload length is 5 bytes
-(bufset-u16 tx-frame 3 0x2021)        ;Packet is from ESC to BLE
-(bufset-u16 tx-frame 5 0x6400)        ;Packet is from ESC to BLE
+(bufset-u16 tx-frame 0 0x5AA5) ;Ninebot protocol
+(bufset-u8 tx-frame 2 0x06) ;Payload length is 5 bytes
+(bufset-u16 tx-frame 3 0x2021) ; Packet is from ESC to BLE
+(bufset-u16 tx-frame 5 0x6400) ; Packet is from ESC to BLE
 (def uart-buf (array-create 64))
-
-(define back-enabled 1)
-(def software-adc 1)
-(def min-adc-throttle 0.1)
-(def min-adc-brake 0.1)
-
-(define last-action-time (systime))
-(define secs-left 0)
 
 ; Button handling
 (def presstime (systime))
-(def feedback 0)
-(def beep-time 1)
+(def presses 0)
 
 ; Mode states
+(def off 1)
 (def lock 0)
-(def speedmode 4)
+(def speedmode 1)
 (def light 0)
 (def unlock 0)
-(def presses 0)
-(def off 1)
+(def mode-changed 0)
+
+; timeout
+(define secs-left 0)
+(define last-action-time (systime))
 
 ;cruise
 (def last-throttle-updated-at-time (systime))
@@ -108,83 +82,59 @@
 (def cruise-after-sec 5)
 (def cruise-dead-zone 0.1)
 (def cruise-enabled 0)
-
-(define thr 0)
-(define real-thr 0)
-(define brake 0)
-(define mode-changed 0)
+(def thr 0)
 (def light-times 0)
+
+;break-light
+(def break-light-enabled 0)
+(def brake 0)
+
+; Sound feedback
+(def feedback 0)
+(def beep-time 1)
 
 (if (= software-adc 1)
     (app-adc-detach 3 1)
     (app-adc-detach 3 0)
 )
 
-(defun enable_brake()
-    {
-        (gpio-write 'pin-ppm 1)
-    }
-)
-
-(defun disable_brake()
-    {
-        (gpio-write 'pin-ppm 0)
-    }
-)
-
-(defun switch_brake()
-    {
-        (gpio-write 'pin-ppm (bitwise-xor (gpio-read 'pin-ppm) 1))
-    }
-)
-
-;breaklight logic
-(loopwhile-thd 100 t {
-        (if (and (= back-enabled 1) (> (get-speed) 1) (> brake min-brake-val))
-            {
-                (disable_brake)
-                (sleep (/ 1.0 10))
-                (enable_brake)
-                (sleep (*(/ 1.0 10)0.25))
-            }
-        )
-
-        (sleep 0.05)
-})
-
-;timout logic
-(loopwhile-thd 100 t {
-        (if (> secs-left ble-timeout)
-            (if (= off 0)
-                (shut-down-ble)
-            )
-        )
-
-        (sleep 1)
-})
-
 (defun beep(time count)
     {
-        ;(printf (str-merge "beep time(" (str-from-n time) ") count(" (str-from-n count) ")"))
         (set 'beep-time time)
         (set 'feedback count)
     }
 )
 
-(defun disable-cruise(handler)
+(defun enable_brake()
+    {
+        (gpio-write 'pin-hall3 1)
+    }
+)
+
+(defun disable_brake()
+    {
+        (gpio-write 'pin-hall3 0)
+    }
+)
+
+(defun switch_brake()
+    {
+        (gpio-write 'pin-hall3 (bitwise-xor (gpio-read 'pin-hall3) 1))
+    }
+)
+
+(defun disable-cruise()
     (if (= cruise-enabled 1)
         {
             (setvar 'cruise-enabled 0)
             (app-adc-override 3 0)
-            ;(printf (str-merge "DISABLE cruise by " handler))
         }
     )
 )
 
 (defun enable-cruise(thr)
-    (if (> (get-speed) 0)
+    (if (> (get-speed) min-speed)
         {
-            ;(printf "enable cruise")
             (setvar 'cruise-enabled 1)
             (app-adc-override 3 thr)
             (set 'light-times 6)
@@ -193,39 +143,34 @@
     )
 )
 
+;breaklight logic
+(loopwhile-thd 100 t {
+        (if (and (= break-light-enabled 1) (> brake min-adc-brake) (> (get-speed) 1))
+            {
+                (disable_brake)
+                (sleep (/ 1.0 10))
+                (enable_brake)
+                (sleep (*(/ 1.0 10)0.25))
+            }
+        )
+
+        (if (> secs-left (* 7 60));timeout
+            (if (= off 0)
+                (shut-down-ble)
+            )
+        )
+
+        (sleep 0.05)
+})
+
 (defun adc-input(buffer) ; Frame 0x65
     {
         (set 'last-throttle-dead-min (- thr cruise-dead-zone))
         (set 'last-throttle-dead-max (+ thr cruise-dead-zone))
+        (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
+        (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
 
-          (if (not (= brake (/(bufget-u8 uart-buf 6) 77.2)))
-            {
-                (set 'brake (/(bufget-u8 uart-buf 6) 77.2))
-                ;(printf (str-merge "brake => " (str-from-n brake)))
-            }
-        )
-
-        (if (not (= real-thr (/(bufget-u8 uart-buf 5) 77.2)))
-            {
-                (set 'real-thr (/(bufget-u8 uart-buf 5) 77.2))
-                ;(printf (str-merge "thr => " (str-from-n real-thr)))
-            }
-        )
-
-        (if (< brake min-brake-val)
-            {
-                 (set 'thr (/(bufget-u8 uart-buf 5) 77.2))
-            }
-        )
-
-        (if (>= brake min-brake-val)
-            {
-                (disable-cruise "brake")
-                (set 'thr 0)
-            }
-        )
-
-        (if (<= thr min-thr-val)
+        (if (<= thr min-adc-thr)
             (setvar 'last-throttle-updated-at-time (systime))
         )
 
@@ -237,16 +182,23 @@
             (setvar 'last-throttle-updated-at-time (systime))
         )
 
+        (if (>= brake min-adc-brake)
+            {
+                (disable-cruise)
+                (set 'thr 0)
+            }
+        )
+
         (if (= cruise-enabled 1)
-            (if (< last-throttle-dead-min min-thr-val)
-                (if (> thr min-thr-val)
-                    (disable-cruise "throttle push")
+            (if (< last-throttle-dead-min min-adc-thr)
+                (if (> thr min-adc-thr)
+                    (disable-cruise)
                 )
             )
         )
 
+        (let ((current-speed (* (get-speed) 3.6))) ; 255/3.3 = 77.2
 
-        (let ((current-speed (* (get-speed) 3.6)))
             {
                 (if (< thr 0)
                     (setf thr 0))
@@ -257,13 +209,13 @@
                 (if (> brake 3.3)
                     (setf brake 3.3))
 
-                ; Pass through throttle and brk to VESC
+                ; Pass through throttle and brake to VESC
                 (app-adc-override 0 thr)
                 (app-adc-override 1 brake)
 
                 ; time-out
                 (if (= off 0)
-                    (if (> thr min-thr-val)
+                    (if (> thr min-adc-thr)
                             (setvar 'last-action-time (systime))
                     )
                 )
@@ -274,37 +226,32 @@
                     )
                 )
 
-                (if (= off 0)
-                    (if (> brake min-brake-val)
+                 (if (= off 0)
+                    (if (> brake min-adc-brake)
                             (setvar 'last-action-time (systime))
                     )
                 )
                 (if (= off 0)
                     (setvar 'secs-left (secs-since last-action-time))
                 )
-                    }
-                )
+            }
+        )
 
-                (if (> (secs-since last-throttle-updated-at-time) cruise-after-sec)
-                    (if (!= cruise-enabled 1)
-                        (enable-cruise thr)
-                    )
-                )
+        (if (and (!= cruise-enabled 1) (> (secs-since last-throttle-updated-at-time) cruise-after-sec) (> (* (get-speed) 3.6) min-speed))
+            (enable-cruise thr)
+        )
     }
 )
 
 (defun handle-features()
     {
-        (if (or (= off 1) (= lock 1))
+        (if (or (or (= off 1) (= lock 1) (< (* (get-speed) 3.6) min-speed)))
             (if (not (app-is-output-disabled)) ; Disable output when scooter is turned off
                 {
                     (app-adc-override 0 0)
                     (app-adc-override 1 0)
                     (app-disable-output -1)
                     (set-current 0)
-                    ;(loopforeach i (can-list-devs)
-                    ;    (canset-current i 0)
-                    ;)
                 }
 
             )
@@ -316,8 +263,9 @@
         (if (= lock 1)
             {
                 (set-current-rel 0) ; No current input when locked
-                (if (> (abs (* (get-speed) 3.6)) min-speed)
-                    (set-brake-rel 1) ; Full power brk
+                (if (> (* (get-speed) 3.6) min-speed)
+                    (set-brake-rel 1) ; Full power brake
+                    (set-brake-rel 0) ; No brake
                 )
             }
         )
@@ -328,16 +276,13 @@
     {
         (var current-speed (* (l-speed) 3.6))
         (var battery (*(get-batt) 100))
-        (if (> battery 0)
-            (set 'battery (+ battery 4))
-        )
 
         ; mode field (1=drive, 2=eco, 4=sport, 8=charge, 16=off, 32=lock)
         (if (= off 1)
             (bufset-u8 tx-frame 7 16)
             (if (= lock 1)
                 (bufset-u8 tx-frame 7 32) ; lock display
-                (if (or (> (get-temp-fet) hi-temp-fet) (> (get-temp-mot) hi-temp-motor)) ; temp icon
+                (if (or (> (get-temp-fet) 60) (> (get-temp-mot) 60)) ; temp icon will show up above 60 degree
                     (bufset-u8 tx-frame 7 (+ 128 speedmode))
                     (bufset-u8 tx-frame 7 speedmode)
                 )
@@ -345,13 +290,12 @@
         )
 
         ; batt field
-        ;(bufset-u8 tx-frame 8 battery)
         (if (> mode-changed 0)
             {
                 (bufset-u8 tx-frame 8 0)
                 (set 'mode-changed (- mode-changed 1))
             }
-            (if (and (> brake min-brake-val) (<= (get-speed) 0))
+            (if (and (> brake min-adc-brake) (< (abs current-speed) 0.1))
                 (bufset-u8 tx-frame 8 0)
                 (bufset-u8 tx-frame 8 battery)
             )
@@ -372,18 +316,6 @@
             }
         )
 
-        ; beep field
-        (if (>= feedback 0)
-            {
-                (bufset-u8 tx-frame 10 beep-time)
-                (set 'feedback (- feedback 1))
-            }
-        )
-
-        (if (< feedback 0)
-            (bufset-u8 tx-frame 10 0)
-        )
-
         ; speed field
         (if (> mode-changed 0)
             {
@@ -396,9 +328,9 @@
                 (if (> current-speed 1)
                     (bufset-u8 tx-frame 11 current-speed)
                     {
-                        (if (> brake min-brake-val)
+                        (if (> brake min-adc-brake)
                             {
-                                (if (> real-thr min-thr-val)
+                                (if (> thr min-adc-thr)
                                     (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
                                     (bufset-u8 tx-frame 11 (* (/ (get-vin) (conf-get 'si-battery-cells)) 10))
                                 )
@@ -410,40 +342,39 @@
             }
         )
 
-
-
         ; error field
-        ;(secs-since last-temp-time)
-        (if (> (get-fault) 0)
+        (if (= (get-fault) 0)
             {
-                (bufset-u8 tx-frame 12 (get-fault))
-            }
-            {
-                (if (> (secs-since last-temp-time) 10)
-                    {
-                        (if (< (secs-since last-temp-time) 16)
-                            {
-                                (bufset-u8 tx-frame 12 (get-temp-fet 0))
-                            }
-                            {
-                                (bufset-u8 tx-frame 12 0)
-                                (set 'last-temp-time (systime))
-                            }
-                        )
-                    }
-                    {
-                        (bufset-u8 tx-frame 12 0)
-                    }
+                (if (> brake min-adc-brake)
+                    (bufset-u8 tx-frame 12 0)
+                    (bufset-u8 tx-frame 12 (get-temp-fet 0))
                 )
             }
+            {
+                (bufset-u8 tx-frame 12 (get-fault))
+                (beep 2 2)
+            }
+        )
+
+        ; beep field
+        (if (= lock 1)
+            (if (> current-speed min-speed)
+                (bufset-u8 tx-frame 10 1) ; beep lock
+                (bufset-u8 tx-frame 10 0))
+            (if (> feedback 0)
+                {
+                    (bufset-u8 tx-frame 10 beep-time)
+                    (set 'feedback (- feedback 1))
+                }
+                (bufset-u8 tx-frame 10 0)
+            )
         )
 
         ; calc crc
 
         (var crcout 0)
         (looprange i 2 13
-            (set 'crcout (+ crcout (bufget-u8 tx-frame i)))
-        )
+        (set 'crcout (+ crcout (bufget-u8 tx-frame i))))
         (set 'crcout (bitwise-xor crcout 0xFFFF))
         (bufset-u8 tx-frame 13 crcout)
         (bufset-u8 tx-frame 14 (shr crcout 8))
@@ -457,28 +388,26 @@
     (loopwhile t
         {
             (uart-read-bytes uart-buf 3 0)
-
             (if (= (bufget-u16 uart-buf 0) 0x5aa5)
-                (if (or(= (bufget-u8 uart-buf 2) 5) (= (bufget-u8 uart-buf 2) 7))
                 {
                     (var len (bufget-u8 uart-buf 2))
                     (var crc len)
                     (if (and (> len 0) (< len 60)) ; max 64 bytes
                         {
                             (uart-read-bytes uart-buf (+ len 6) 0) ;read remaining 6 bytes + payload, overwrite buffer
+
                             (let ((code (bufget-u8 uart-buf 2)) (checksum (bufget-u16 uart-buf (+ len 4))))
                                 {
                                     (looprange i 0 (+ len 4) (set 'crc (+ crc (bufget-u8 uart-buf i))))
 
                                     (if (= checksum (bitwise-and (+ (shr (bitwise-xor crc 0xFFFF) 8) (shl (bitwise-xor crc 0xFFFF) 8)) 65535)) ;If the calculated checksum matches with sent checksum, forward comman
-                                            (handle-frame code)
+                                        (handle-frame code)
                                     )
                                 }
                             )
                         }
                     )
-                })
-
+                }
             )
         }
     )
@@ -487,9 +416,7 @@
 (defun handle-frame(code)
     {
         (if (and (= code 0x65) (= software-adc 1))
-            {
-                (adc-input uart-buf)
-            }
+            (adc-input uart-buf)
         )
 
         (if(= code 0x64)
@@ -501,49 +428,43 @@
 (defun turn-on-ble()
     {
         (app-adc-override 3 0) ; disable cruise button
-        (beep 1 1)
-        (setvar 'speedmode 2)
+        (set 'speedmode 2)
         (set 'unlock 0)
-        (setvar 'back-enabled 1)
+        (set 'break-light-enabled 1)
         (enable_brake)
         (apply-mode) ; Apply mode on start-up
-        (setvar 'last-action-time (systime))
-        (setvar 'off 0) ; turn on
+        (set 'last-action-time (systime))
+        (beep 1 1)
+        (set 'off 0) ; turn on
     }
 )
 
 (defun handle-button()
     (if (= presses 1) ; single press
         (if (= off 1) ; is it off? turn on scooter again
-            (turn-on-ble)
             {
-                (if (and (<= (get-speed) button-safety-speed) (< brake min-brake-val) (= lock 0) (< real-thr min-thr-val))
-                    {
-                        ;(def min-brake-val 0.50)
-                        ;(printf (str-merge "ligh enabled: brake => " (str-from-n brake) " | " (to-str (< brake min-brake-val))))
-                        (set 'light (bitwise-xor light 1)) ; toggle light
-                    }
-                )
+                (turn-on-ble)
             }
+            (set 'light (bitwise-xor light 1)) ; toggle light
         )
         (if (>= presses 2) ; double press
             {
-                (if (> (get-adc-decoded 1) min-brake-val) ; if brake is pressed
-                    (if (> real-thr min-thr-val)
+                (if (> (get-adc-decoded 1) min-adc-brake) ; if brake is pressed
+                    (if (and (= secret-enabled 1) (> (get-adc-decoded 0) min-adc-thr))
                         {
                             (set 'unlock (bitwise-xor unlock 1))
-                            (setvar 'mode-changed 30)
+                            (set 'mode-changed 30)
                             (if (= unlock 0)
                                 (beep 2 1)
                                 (beep 1 2)
                             )
-
-                            ;(printf (str-merge "unlock: " (str-from-n unlock)))
                             (apply-mode)
                         }
                         {
-                            (setvar 'lock (bitwise-xor lock 1)) ; lock on or off
-                            (beep 1 1)
+                            (set 'unlock 0)
+                            (apply-mode)
+                            (set 'lock (bitwise-xor lock 1)) ; lock on or off
+                            (beep 1 1) ; beep feedback
                         }
                     )
                     {
@@ -566,25 +487,19 @@
 
 (defun shut-down-ble()
     {
-        (app-adc-override 3 0) ; disable cruise button
-        (set 'unlock 0) ; Disable unlock on turn off
-        (apply-mode)
-        (set 'off 1) ; turn off
-        (set 'back-enabled 0)  ; disable break light
-        (disable_brake)
-        (set 'light 0) ; disable front light
-        (beep 2 1)
-        (set 'secs-left 0)
-        (set 'off 1) ; turn off
-    }
-)
-
-(defun handle-holding-button()
-    {
         (if (= (+ lock off) 0) ; it is locked and off?
-            (shut-down-ble)
+            {
+                (app-adc-override 3 0) ; disable cruise button
+                (set 'unlock 0) ; Disable unlock on turn off
+                (apply-mode)
+                (set 'break-light-enabled 0)  ; disable break light
+                (disable_brake)
+                (set 'light 0) ; turn off light
+                (beep 2 1) ; beep feedback
+                (set 'secs-left 0)
+                (set 'off 1) ; turn off
+            }
         )
-        ;(printf "long press btn")
     }
 )
 
@@ -592,7 +507,6 @@
     {
         (set 'presstime (systime)) ; reset press time again
         (set 'presses 0)
-        ;(printf "btn presses => 0 RESET")
     }
 )
 
@@ -601,42 +515,32 @@
 (defun apply-mode()
     (if (= unlock 0)
         (if (= speedmode 1)
-            (configure-speed drive-speed drive-watts drive-current drive-fw def-motor-max def-motor-abs)
+            (configure-speed drive-speed drive-watts drive-current drive-fw)
             (if (= speedmode 2)
-                (configure-speed eco-speed eco-watts eco-current eco-fw def-motor-max def-motor-abs)
+                (configure-speed eco-speed eco-watts eco-current eco-fw)
                 (if (= speedmode 4)
-                    (configure-speed sport-speed sport-watts sport-current sport-fw def-motor-max def-motor-abs)
+                    (configure-speed sport-speed sport-watts sport-current sport-fw)
                 )
             )
         )
         (if (= speedmode 1)
-            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current secret-drive-fw def-motor-max secret-motor-abs)
+            (configure-speed secret-drive-speed secret-drive-watts secret-drive-current secret-drive-fw)
             (if (= speedmode 2)
-                (configure-speed secret-eco-speed secret-eco-watts secret-eco-current secret-eco-fw def-motor-max def-motor-abs)
+                (configure-speed secret-eco-speed secret-eco-watts secret-eco-current secret-eco-fw)
                 (if (= speedmode 4)
-                        (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-sport-fw secret-motor-max secret-motor-abs)
+                    (configure-speed secret-sport-speed secret-sport-watts secret-sport-current secret-sport-fw)
                 )
             )
         )
     )
 )
 
-(defun configure-speed(speed watts current fw motor-max motor-abs)
+(defun configure-speed(speed watts current fw)
     {
         (set-param 'max-speed speed)
         (set-param 'l-watt-max watts)
         (set-param 'l-current-max-scale current)
-        (set-param 'l-current-max motor-max) ; motor current max
-        (set-param 'l-abs-current-max motor-abs) ; motor abs max
         (set-param 'foc-fw-current-max fw)
-
-        ;(printf (str-merge "configure-speed=> motorMax:" (str-from-n (conf-get 'l-current-max)) " motorAbs:" (str-from-n (conf-get 'l-abs-current-max))
-        ;" fw:" (str-from-n (conf-get 'foc-fw-current-max))
-        ;))
-
-        (if (!= beep-time 2)
-             (beep 1 1)
-        )
     }
 )
 
@@ -675,7 +579,7 @@
         (loopwhile t
             {
                 (var button (gpio-read 'pin-rx))
-                (sleep 0.025) ; wait 25 ms to debounce
+                (sleep 0.05) ; wait 50 ms to debounce
                 (var buttonconfirm (gpio-read 'pin-rx))
                 (if (not (= button buttonconfirm))
                     (set 'button 0)
@@ -684,7 +588,6 @@
                 (if (> buttonold button)
                     {
                         (set 'presses (+ presses 1))
-                        ;(printf (str-merge "btn presses => " (str-from-n presses)))
                         (set 'presstime (systime))
                     }
                     (button-apply button)
@@ -700,22 +603,23 @@
 (defun button-apply(button)
     {
         (var time-passed (- (systime) presstime))
-        (var is-active (or (= off 1) (and (<= (get-speed) button-safety-speed) (< (abs (get-current 0)) 0.1))))
-        ;(var is-active (= off 1))
+        (var is-active (or (= off 1) (<= (get-speed) button-safety-speed)))
 
-        (if (> time-passed 4500) ; after 2500 ms
+        (if (> time-passed 2500) ; after 2500 ms
             (if (= button 0) ; check button is still pressed
-                (if (> time-passed 8000) ; long press after 6000 ms
+                (if (> time-passed 6000) ; long press after 6000 ms
                     {
-                        (if (= off 0)
-                            (handle-holding-button)
+                        (if is-active
+                            (shut-down-ble)
                         )
                         (reset-button) ; reset button
                     }
                 )
                 (if (> presses 0) ; if presses > 0
                     {
-                        (handle-button) ; handle button presses
+                        (if is-active
+                            (handle-button) ; handle button presses
+                        )
                         (reset-button) ; reset button
                     }
                 )
@@ -725,7 +629,8 @@
 )
 
 ; Apply mode on start-up
-;(apply-mode)
+(apply-mode)
+(disable_brake)
 (turn-on-ble)
 
 ; Spawn UART reading frames thread
