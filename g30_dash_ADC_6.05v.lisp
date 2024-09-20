@@ -146,7 +146,7 @@
 
 ;breaklight logic
 (loopwhile-thd 100 t {
-        (if (and (= break-light-enabled 1) (> brake min-adc-brake) (> (get-speed) 1))
+        (if (and (> off 0) (= break-light-enabled 1) (> brake min-adc-brake) (> (get-speed) 1))
             {
                 (disable_brake)
                 (sleep (/ 1.0 10))
