@@ -265,7 +265,7 @@
         (if (= lock 1)
             {
                 (set-current-rel 0) ; No current input when locked
-                (if (> (* (get-speed) 3.6) min-speed)
+                (if (> (abs (* (get-speed) 3.6)) min-speed)
                     (set-brake-rel 1) ; Full power brake
                     (set-brake-rel 0) ; No brake
                 )
@@ -297,10 +297,19 @@
                 (bufset-u8 tx-frame 8 0)
                 (set 'mode-changed (- mode-changed 1))
             }
-            (if (and (> brake min-adc-brake) (< (abs current-speed) 0.1))
-                (bufset-u8 tx-frame 8 0)
-                (bufset-u8 tx-frame 8 battery)
-            )
+            {
+                (if (= lock 1)
+                    {
+                        (bufset-u8 tx-frame 8 0)
+                    }
+                    {
+                        (if (and (> brake min-adc-brake) (< (abs current-speed) 0.1))
+                            (bufset-u8 tx-frame 8 0)
+                            (bufset-u8 tx-frame 8 battery)
+                        )
+                    }
+                )
+            }
         )
 
         ; light field
@@ -327,29 +336,42 @@
                 )
             }
             {
-                (if (> current-speed 1)
-                    (bufset-u8 tx-frame 11 current-speed)
+               (if (= lock 1)
                     {
-                        (if (> brake min-adc-brake)
+                        (bufset-u8 tx-frame 11 battery)
+                    }
+                    {
+                         (if (> current-speed 1)
+                            (bufset-u8 tx-frame 11 current-speed)
                             {
-                                (if (> real-thr-pos min-adc-thr)
-                                    (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
-                                    (bufset-u8 tx-frame 11 (* (/ (get-vin) (conf-get 'si-battery-cells)) 10))
+                                (if (> brake min-adc-brake)
+                                    {
+                                        (if (> real-thr-pos min-adc-thr)
+                                            (bufset-u8 tx-frame 11 (/ (get-dist) 1000))
+                                            (bufset-u8 tx-frame 11 (* (/ (get-vin) (conf-get 'si-battery-cells)) 10))
+                                        )
+                                    }
+                                    (bufset-u8 tx-frame 11 battery)
                                 )
                             }
-                            (bufset-u8 tx-frame 11 battery)
                         )
                     }
-                )
+               )
             }
         )
 
         ; error field
         (if (= (get-fault) 0)
             {
-                (if (> brake min-adc-brake)
-                    (bufset-u8 tx-frame 12 0)
-                    (bufset-u8 tx-frame 12 (get-temp-fet 0))
+                (if (= lock 1)
+                    {
+                        (bufset-u8 tx-frame 12 0)
+                    }
+                    {
+                        (if (> brake min-adc-brake)
+                            (bufset-u8 tx-frame 12 (get-temp-fet 0))
+                        )
+                    }
                 )
             }
             {
@@ -360,9 +382,10 @@
 
         ; beep field
         (if (= lock 1)
-            (if (> current-speed min-speed)
+            (if (> (abs current-speed) min-speed)
                 (bufset-u8 tx-frame 10 1) ; beep lock
-                (bufset-u8 tx-frame 10 0))
+                (bufset-u8 tx-frame 10 0)
+            )
             (if (> feedback 0)
                 {
                     (bufset-u8 tx-frame 10 beep-time)
@@ -447,7 +470,11 @@
             {
                 (turn-on-ble)
             }
-            (set 'light (bitwise-xor light 1)) ; toggle light
+            {
+                (if (= lock 0)
+                    (set 'light (bitwise-xor light 1)) ; toggle light
+                )
+            }
         )
         (if (>= presses 2) ; double press
             {
