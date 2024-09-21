@@ -340,8 +340,14 @@
                         (bufset-u8 tx-frame 12 0)
                     }
                     {
-                        (if (> brake min-adc-brake)
+                        (if (and (> current-speed 1))
                             (bufset-u8 tx-frame 12 (get-temp-fet 0))
+                            {
+                                (if (> brake min-adc-brake)
+                                    (bufset-u8 tx-frame 12 0)
+                                    (bufset-u8 tx-frame 12 (get-temp-fet 0))
+                                )
+                            }
                         )
                     }
                 )
