@@ -6,6 +6,8 @@
 (def software-adc 1)
 (def min-adc-thr 0.55)
 (def min-adc-brake 0.55)
+(def vesc-high-temp 85)
+(def mot-high-temp 120)
 
 (def min-speed 1)
 (def button-safety-speed (/ 0.1 3.6))
@@ -266,7 +268,7 @@
             (bufset-u8 tx-frame 7 16)
             (if (= lock 1)
                 (bufset-u8 tx-frame 7 32) ; lock display
-                (if (or (> (get-temp-fet) 60) (> (get-temp-mot) 60)) ; temp icon will show up above 60 degree
+                (if (or (> (get-temp-fet) vesc-high-temp) (> (get-temp-mot) mot-high-temp)) ; temp icon
                     (bufset-u8 tx-frame 7 (+ 128 speedmode))
                     (bufset-u8 tx-frame 7 speedmode)
                 )
