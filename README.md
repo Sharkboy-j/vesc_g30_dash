@@ -43,11 +43,6 @@ If you are running **VESC 6.05**, use these:
 
 ![image](guide/imgs/23999.png)
 
-## How do I wire break lights
-
-<span style="color:rgb(184, 49, 47);">Red </span> to swclk \
-<span style="color:rgb(209, 213, 216);">Black </span> to vesc GND 
-
 ## Implemented
 
 
